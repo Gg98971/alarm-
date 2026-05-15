@@ -340,8 +340,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const mathAnswerEl = document.getElementById('math-answer');
     const mathChallengeContainer = document.getElementById('math-challenge-container');
 
-    let editingAlarmId = null;
-
     function updateHeaderCounts() {
         const activeAlarmCount = alarms.filter(alarm => alarm.active).length;
 
