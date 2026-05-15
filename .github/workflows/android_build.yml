@@ -25,23 +25,14 @@ jobs:
           node-version: '22'
           cache: 'npm'
 
-      - name: Build Web Assets
-        run: npm run build
-
       - name: Install Dependencies
         run: npm install
 
-      - name: Capacitor Doctor
-        run: npx cap doctor android || true
+      - name: Build Web Assets
+        run: npm run build
 
       - name: Sync Capacitor
         run: npx cap sync android --verbose
-        continue-on-error: true
-
-      - name: Force Update if Sync Failed
-        run: |
-          npx cap update android --verbose
-          npx cap copy android --verbose
 
       - name: Build with Gradle
         run: |
