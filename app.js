@@ -660,29 +660,34 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentMathAnswer = 0;
 
     function generateMathProblem() {
-        // Randomly choose between two problem formats
-        const format = Math.random() > 0.5 ? 'mult_add' : 'div_mult_add';
+        let answer = 0;
+        let problemText = "";
         
-        if (format === 'mult_add') {
-            const num1 = Math.floor(Math.random() * 8) + 2; // 2 to 9
-            const num2 = Math.floor(Math.random() * 41) + 10; // 10 to 50
-            const num3 = Math.floor(Math.random() * 450) + 50; // 50 to 500
+        // Ensure answer is between 501 and 998, and not ending in 0 or 5 (to avoid "simple" numbers)
+        let attempts = 0;
+        while ((answer <= 500 || answer >= 999 || answer % 10 === 0 || answer % 10 === 5) && attempts < 100) {
+            attempts++;
+            const format = Math.random() > 0.5 ? 'mult_add' : 'div_mult_add';
             
-            // Max potential: (9 * 50) + 500 = 950
-            currentMathAnswer = (num1 * num2) + num3;
-            mathProblemEl.textContent = `${num1} x ${num2} + ${num3} = ?`;
-        } else {
-            const num2 = Math.floor(Math.random() * 7) + 2; // divisor: 2 to 8
-            const multiplier = Math.floor(Math.random() * 8) + 2; // result of division: 2 to 9
-            const num1 = num2 * multiplier; // dividend (ensures whole number)
-            const num3 = Math.floor(Math.random() * 41) + 10; // 10 to 50
-            const num4 = Math.floor(Math.random() * 450) + 50; // 50 to 500
-            
-            // Max potential: (9 * 50) + 500 = 950
-            currentMathAnswer = (num1 / num2) * num3 + num4;
-            mathProblemEl.textContent = `${num1} / ${num2} x ${num3} + ${num4} = ?`;
+            if (format === 'mult_add') {
+                const num1 = Math.floor(Math.random() * 10) + 3; // 3 to 12
+                const num2 = Math.floor(Math.random() * 60) + 10; // 10 to 69
+                const num3 = Math.floor(Math.random() * 500) + 50; // 50 to 549
+                answer = (num1 * num2) + num3;
+                problemText = `${num1} x ${num2} + ${num3} = ?`;
+            } else {
+                const num2 = Math.floor(Math.random() * 8) + 2; // divisor: 2 to 9
+                const multiplier = Math.floor(Math.random() * 10) + 3; // division result: 3 to 12
+                const num1 = num2 * multiplier; 
+                const num3 = Math.floor(Math.random() * 60) + 10; // 10 to 69
+                const num4 = Math.floor(Math.random() * 500) + 50; // 50 to 549
+                answer = (num1 / num2) * num3 + num4;
+                problemText = `${num1} / ${num2} x ${num3} + ${num4} = ?`;
+            }
         }
         
+        currentMathAnswer = answer;
+        mathProblemEl.textContent = problemText;
         mathAnswerEl.value = '';
     }
 
