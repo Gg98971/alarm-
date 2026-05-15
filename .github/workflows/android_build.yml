@@ -17,7 +17,7 @@ jobs:
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
-          java-version: '17'
+          java-version: '21'
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -29,7 +29,7 @@ jobs:
         run: npm install
 
       - name: Sync Capacitor
-        run: npx cap sync android
+        run: npx cap sync android --verbose
 
       - name: Build with Gradle
         run: |
