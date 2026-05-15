@@ -385,6 +385,39 @@ input:checked + .slider:before {
     height: 18px;
 }
 
+.alarm-action-buttons {
+    display: flex;
+    gap: 12px;
+    margin-left: auto;
+    align-items: center;
+}
+
+.edit-alarm-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    transition: color 0.2s ease, transform 0.2s ease;
+}
+
+.edit-alarm-btn:hover {
+    color: var(--accent-cyan);
+}
+
+.edit-alarm-btn:active {
+    transform: scale(0.9);
+}
+
+.edit-alarm-btn i,
+.edit-alarm-btn svg {
+    width: 18px;
+    height: 18px;
+}
+
 .delete-clock-btn {
     opacity: 0.65;
     padding: 4px;
