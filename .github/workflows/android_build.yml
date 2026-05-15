@@ -27,15 +27,17 @@ jobs:
 
       - name: Sync Web Assets
         run: |
+          mkdir -p www
           cp index.html www/
           cp index.css www/
           cp app.js www/
           cp manifest.json www/
           cp service-worker.js www/
           cp icon.png www/ || true
+          ls -R www/
 
       - name: Install Dependencies
-        run: npm ci
+        run: npm install
 
       - name: Sync Capacitor
         run: npx cap sync android --verbose
