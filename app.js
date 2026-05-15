@@ -664,19 +664,21 @@ document.addEventListener('DOMContentLoaded', () => {
         const format = Math.random() > 0.5 ? 'mult_add' : 'div_mult_add';
         
         if (format === 'mult_add') {
-            const num1 = Math.floor(Math.random() * 13) + 3; // 3 to 15
-            const num2 = Math.floor(Math.random() * 85) + 15; // 15 to 99
-            const num3 = Math.floor(Math.random() * 950) + 50; // 50 to 999
+            const num1 = Math.floor(Math.random() * 8) + 2; // 2 to 9
+            const num2 = Math.floor(Math.random() * 41) + 10; // 10 to 50
+            const num3 = Math.floor(Math.random() * 450) + 50; // 50 to 500
             
+            // Max potential: (9 * 50) + 500 = 950
             currentMathAnswer = (num1 * num2) + num3;
             mathProblemEl.textContent = `${num1} x ${num2} + ${num3} = ?`;
         } else {
-            const num2 = Math.floor(Math.random() * 11) + 2; // divisor: 2 to 12
-            const multiplier = Math.floor(Math.random() * 14) + 2; // result of division: 2 to 15
+            const num2 = Math.floor(Math.random() * 7) + 2; // divisor: 2 to 8
+            const multiplier = Math.floor(Math.random() * 8) + 2; // result of division: 2 to 9
             const num1 = num2 * multiplier; // dividend (ensures whole number)
-            const num3 = Math.floor(Math.random() * 85) + 15; // 15 to 99
-            const num4 = Math.floor(Math.random() * 950) + 50; // 50 to 999
+            const num3 = Math.floor(Math.random() * 41) + 10; // 10 to 50
+            const num4 = Math.floor(Math.random() * 450) + 50; // 50 to 500
             
+            // Max potential: (9 * 50) + 500 = 950
             currentMathAnswer = (num1 / num2) * num3 + num4;
             mathProblemEl.textContent = `${num1} / ${num2} x ${num3} + ${num4} = ?`;
         }
