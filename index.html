@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Circadian Ease</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link rel="stylesheet" href="index.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Top Bar -->
+        <header class="top-bar">
+            <h1 class="app-title">Circadian Ease</h1>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            
+            <!-- World Clock View -->
+            <section id="world-clock-view" class="view active">
+                <div class="view-header">
+                    <div class="header-text">
+                        <h2>World Clock</h2>
+                        <p>3 timezones active</p>
+                    </div>
+                    <button class="fab" id="add-world-clock-btn" aria-label="Add world clock">
+                        <i data-lucide="plus"></i>
+                    </button>
+                </div>
+
+                <div class="card-list">
+                    <!-- New York Card -->
+                    <div class="card">
+                        <div class="card-top">
+                            <div class="location-info">
+                                <h3>New York</h3>
+                                <p class="subtitle">Local Time</p>
+                            </div>
+                            <div class="time-info">
+                                <span class="time" id="time-ny">07:30</span>
+                                <span class="ampm active-text">AM</span>
+                            </div>
+                        </div>
+                        <div class="card-bottom">
+                            <div class="phase-info active-text">
+                                <i data-lucide="sun"></i>
+                                <span>MORNING</span>
+                            </div>
+                            <div class="day-info">
+                                <span>Today</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- London Card -->
+                    <div class="card">
+                        <div class="card-top">
+                            <div class="location-info">
+                                <h3>London</h3>
+                                <p class="subtitle">+5 HRS</p>
+                            </div>
+                            <div class="time-info">
+                                <span class="time" id="time-lon">12:30</span>
+                                <span class="ampm">PM</span>
+                            </div>
+                        </div>
+                        <div class="card-bottom">
+                            <div class="phase-info">
+                                <i data-lucide="sun-dim"></i>
+                                <span>AFTERNOON</span>
+                            </div>
+                            <div class="day-info">
+                                <span>Today</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tokyo Card -->
+                    <div class="card">
+                        <div class="card-top">
+                            <div class="location-info">
+                                <h3>Tokyo</h3>
+                                <p class="subtitle">+13 HRS</p>
+                            </div>
+                            <div class="time-info">
+                                <span class="time" id="time-tok">20:30</span>
+                                <span class="ampm">PM</span>
+                            </div>
+                        </div>
+                        <div class="card-bottom">
+                            <div class="phase-info">
+                                <i data-lucide="moon"></i>
+                                <span>NIGHT</span>
+                            </div>
+                            <div class="day-info active-text">
+                                <span>Tomorrow</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Alarms View -->
+            <section id="alarms-view" class="view">
+                <div class="view-header">
+                    <div class="header-text">
+                        <h2>Alarms</h2>
+                        <p>2 alarms active</p>
+                    </div>
+                    <button class="fab" id="add-alarm-btn" aria-label="Add alarm">
+                        <i data-lucide="plus"></i>
+                    </button>
+                </div>
+
+                <div class="card-list">
+                    <!-- Dynamic Alarms go here -->
+                </div>
+            </section>
+            
+            <!-- Stopwatch View -->
+            <section id="stopwatch-view" class="view">
+                 <div class="view-header">
+                    <div class="header-text">
+                        <h2>Stopwatch</h2>
+                        <p>Track your time</p>
+                    </div>
+                </div>
+                <div class="stopwatch-container">
+                    <div class="time-display" id="stopwatch-display">00:00.00</div>
+                    <div class="controls stopwatch-controls">
+                        <button id="sw-start-pause" class="btn primary-btn"><i data-lucide="play"></i></button>
+                        <button id="sw-lap-reset" class="btn secondary-btn"><i data-lucide="refresh-cw"></i></button>
+                    </div>
+                    <ul id="lap-list" class="lap-list">
+                        <!-- Laps go here -->
+                    </ul>
+                </div>
+            </section>
+
+            <!-- Timer View -->
+            <section id="timer-view" class="view">
+                 <div class="view-header">
+                    <div class="header-text">
+                        <h2>Timer</h2>
+                        <p>Countdown</p>
+                    </div>
+                </div>
+                <div class="timer-container">
+                    <div class="time-picker-custom" id="timer-input-container">
+                        <div class="custom-select-wrapper timer-select">
+                            <select id="timer-hours">
+                                <!-- JS will populate 0-23 -->
+                            </select>
+                            <label>hr</label>
+                            <i data-lucide="chevron-down" class="select-icon"></i>
+                        </div>
+                        <span class="time-separator">:</span>
+                        <div class="custom-select-wrapper timer-select">
+                            <select id="timer-minutes">
+                                <!-- JS will populate 0-59 -->
+                            </select>
+                            <label>min</label>
+                            <i data-lucide="chevron-down" class="select-icon"></i>
+                        </div>
+                        <span class="time-separator">:</span>
+                        <div class="custom-select-wrapper timer-select">
+                            <select id="timer-seconds">
+                                <!-- JS will populate 0-59 -->
+                            </select>
+                            <label>sec</label>
+                            <i data-lucide="chevron-down" class="select-icon"></i>
+                        </div>
+                    </div>
+                    
+                    <div class="time-display hidden" id="timer-display">00:00:00</div>
+
+                    <div class="controls timer-controls">
+                        <button id="tm-start-pause" class="btn primary-btn"><i data-lucide="play"></i></button>
+                        <button id="tm-cancel" class="btn danger-btn" disabled><i data-lucide="x"></i></button>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+
+        <!-- Bottom Navigation -->
+        <nav class="bottom-nav">
+            <button class="nav-item" data-target="alarms-view">
+                <i data-lucide="alarm-clock"></i>
+                <span>ALARMS</span>
+            </button>
+            <button class="nav-item active" data-target="world-clock-view">
+                <i data-lucide="globe"></i>
+                <span>WORLD CLOCK</span>
+            </button>
+            <button class="nav-item" data-target="stopwatch-view">
+                <i data-lucide="timer"></i>
+                <span>STOPWATCH</span>
+            </button>
+            <button class="nav-item" data-target="timer-view">
+                <i data-lucide="hourglass"></i>
+                <span>TIMER</span>
+            </button>
+        </nav>
+    </div>
+
+    <!-- Modals & Overlays -->
+    <div id="alarm-modal" class="modal">
+        <div class="modal-content">
+            <h3>Add Alarm</h3>
+            <div class="form-group">
+                <label>Time</label>
+                <div class="time-picker-custom">
+                    <div class="custom-select-wrapper time-select">
+                        <select id="new-alarm-hour">
+                            <option value="12">12</option>
+                            <option value="01">01</option>
+                            <option value="02">02</option>
+                            <option value="03">03</option>
+                            <option value="04">04</option>
+                            <option value="05">05</option>
+                            <option value="06">06</option>
+                            <option value="07" selected>07</option>
+                            <option value="08">08</option>
+                            <option value="09">09</option>
+                            <option value="10">10</option>
+                            <option value="11">11</option>
+                        </select>
+                        <i data-lucide="chevron-down" class="select-icon"></i>
+                    </div>
+                    <span class="time-separator">:</span>
+                    <div class="custom-select-wrapper time-select">
+                        <select id="new-alarm-minute">
+                            <option value="00">00</option> <option value="01">01</option> <option value="02">02</option> <option value="03">03</option> <option value="04">04</option> <option value="05">05</option> <option value="06">06</option> <option value="07">07</option> <option value="08">08</option> <option value="09">09</option>
+                            <option value="10">10</option> <option value="11">11</option> <option value="12">12</option> <option value="13">13</option> <option value="14">14</option> <option value="15">15</option> <option value="16">16</option> <option value="17">17</option> <option value="18">18</option> <option value="19">19</option>
+                            <option value="20">20</option> <option value="21">21</option> <option value="22">22</option> <option value="23">23</option> <option value="24">24</option> <option value="25">25</option> <option value="26">26</option> <option value="27">27</option> <option value="28">28</option> <option value="29">29</option>
+                            <option value="30" selected>30</option> <option value="31">31</option> <option value="32">32</option> <option value="33">33</option> <option value="34">34</option> <option value="35">35</option> <option value="36">36</option> <option value="37">37</option> <option value="38">38</option> <option value="39">39</option>
+                            <option value="40">40</option> <option value="41">41</option> <option value="42">42</option> <option value="43">43</option> <option value="44">44</option> <option value="45">45</option> <option value="46">46</option> <option value="47">47</option> <option value="48">48</option> <option value="49">49</option>
+                            <option value="50">50</option> <option value="51">51</option> <option value="52">52</option> <option value="53">53</option> <option value="54">54</option> <option value="55">55</option> <option value="56">56</option> <option value="57">57</option> <option value="58">58</option> <option value="59">59</option>
+                        </select>
+                        <i data-lucide="chevron-down" class="select-icon"></i>
+                    </div>
+                    <div class="custom-select-wrapper ampm-select">
+                        <select id="new-alarm-ampm">
+                            <option value="AM" selected>AM</option>
+                            <option value="PM">PM</option>
+                        </select>
+                        <i data-lucide="chevron-down" class="select-icon"></i>
+                    </div>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Label</label>
+                <input type="text" id="new-alarm-label" placeholder="Morning Routine">
+            </div>
+            <div class="form-group">
+                <label>Sound</label>
+                <div class="custom-select-wrapper">
+                    <select id="new-alarm-sound">
+                        <option value="classic">Classic Beep</option>
+                        <option value="chime">Gentle Chime</option>
+                        <option value="buzzer">Buzzer</option>
+                        <option value="fast">Fast Beep</option>
+                        <option value="custom">Upload Custom Audio...</option>
+                    </select>
+                    <i data-lucide="chevron-down" class="select-icon"></i>
+                </div>
+                <input type="file" id="custom-audio-upload" accept="audio/*" style="display: none;">
+            </div>
+            <div class="form-group">
+                <label>Days</label>
+                <div class="modal-day-pills">
+                    <div class="modal-day-pill" data-day="1">M</div>
+                    <div class="modal-day-pill" data-day="2">T</div>
+                    <div class="modal-day-pill" data-day="3">W</div>
+                    <div class="modal-day-pill" data-day="4">T</div>
+                    <div class="modal-day-pill" data-day="5">F</div>
+                    <div class="modal-day-pill" data-day="6">S</div>
+                    <div class="modal-day-pill" data-day="0">S</div>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button id="cancel-alarm" class="secondary-btn">Cancel</button>
+                <button id="save-alarm" class="primary-btn">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="world-clock-modal" class="modal">
+        <div class="modal-content">
+            <h3>Add World Clock</h3>
+            <div class="form-group">
+                <label>Select City</label>
+                <div class="custom-select-wrapper">
+                    <select id="new-city-select">
+                        <option value="Europe/London">London (GMT/BST)</option>
+                        <option value="Asia/Dubai">Dubai (GST)</option>
+                        <option value="Europe/Paris">Paris (CET)</option>
+                        <option value="Asia/Singapore">Singapore (SGT)</option>
+                        <option value="Australia/Sydney">Sydney (AEST)</option>
+                        <option value="America/Los_Angeles">Los Angeles (PT)</option>
+                        <option value="Asia/Seoul">Seoul (KST)</option>
+                        <option value="America/Sao_Paulo">Sao Paulo (BRT)</option>
+                    </select>
+                    <i data-lucide="chevron-down" class="select-icon"></i>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button id="cancel-world-clock" class="secondary-btn">Cancel</button>
+                <button id="save-world-clock" class="primary-btn">Add City</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="ringing-overlay" class="overlay">
+        <div class="ringing-content">
+            <div class="ringing-icon">
+                <i data-lucide="alarm-clock"></i>
+            </div>
+            <h2 id="ringing-label">Alarm</h2>
+            <p id="ringing-time">00:00</p>
+            <div class="math-challenge" id="math-challenge-container">
+                <p class="math-prompt">Solve to dismiss:</p>
+                <h3 id="math-problem">5 &times; 7 = ?</h3>
+                <input type="number" id="math-answer" placeholder="Answer" autocomplete="off">
+            </div>
+            <button id="stop-alarm" class="primary-btn">Stop</button>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
+</html>
