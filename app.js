@@ -378,18 +378,118 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- Navigation Logic ---
-    navItems.forEach(item => {
-        item.addEventListener('click', () => {
-            navItems.forEach(nav => nav.classList.remove('active'));
-            item.classList.add('active');
-            views.forEach(view => view.classList.remove('active'));
-            const targetId = item.getAttribute('data-target');
-            document.getElementById(targetId).classList.add('active');
-        });
+    const TAB_ORDER = ['alarms-view', 'world-clock-view', 'stopwatch-view', 'timer-view'];
+    let currentTabIndex = TAB_ORDER.indexOf('world-clock-view'); // matches the initially active view
+    let isAnimating = false;
+
+    // Build swipe-hint dots in the dedicated bar
+    const swipeHint = document.getElementById('swipe-dots-bar');
+    TAB_ORDER.forEach((_, i) => {
+        const dot = document.createElement('span');
+        dot.className = 'swipe-dot' + (i === currentTabIndex ? ' active' : '');
+        swipeHint.appendChild(dot);
     });
+
+    function updateSwipeDots(index) {
+        swipeHint.querySelectorAll('.swipe-dot').forEach((dot, i) => {
+            dot.classList.toggle('active', i === index);
+        });
+    }
+
+    function switchView(targetIndex, animate = true) {
+        if (isAnimating || targetIndex === currentTabIndex) return;
+        if (targetIndex < 0 || targetIndex >= TAB_ORDER.length) return;
+
+        const goingForward = targetIndex > currentTabIndex;
+        const outClass  = goingForward ? 'slide-out-left'  : 'slide-out-right';
+        const inClass   = goingForward ? 'slide-in-right'  : 'slide-in-left';
+
+        const oldView = document.getElementById(TAB_ORDER[currentTabIndex]);
+        const newView = document.getElementById(TAB_ORDER[targetIndex]);
+
+        // Sync nav tab highlight
+        navItems.forEach(nav => nav.classList.remove('active'));
+        navItems[targetIndex].classList.add('active');
+
+        if (!animate) {
+            oldView.classList.remove('active');
+            newView.classList.add('active');
+            currentTabIndex = targetIndex;
+            updateSwipeDots(currentTabIndex);
+            return;
+        }
+
+        isAnimating = true;
+
+        // Kick off animations
+        oldView.classList.remove('active');
+        oldView.classList.add(outClass);
+        newView.classList.add(inClass);
+
+        const DURATION = 340; // ms — matches CSS animation duration + tiny buffer
+
+        setTimeout(() => {
+            oldView.classList.remove(outClass);
+            newView.classList.remove(inClass);
+            newView.classList.add('active');
+            currentTabIndex = targetIndex;
+            updateSwipeDots(currentTabIndex);
+            isAnimating = false;
+        }, DURATION);
+    }
+
+    // Click on nav tabs
+    navItems.forEach((item, idx) => {
+        item.addEventListener('click', () => switchView(idx));
+    });
+
+    // --- Swipe Gesture Detection ---
+    const mainContent = document.querySelector('.main-content');
+    let touchStartX = 0;
+    let touchStartY = 0;
+    let touchStartTime = 0;
+
+    mainContent.addEventListener('touchstart', (e) => {
+        // Ignore if a modal is open
+        if (document.querySelector('.modal.active, .overlay.active')) return;
+
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+        touchStartTime = Date.now();
+    }, { passive: true });
+
+    mainContent.addEventListener('touchend', (e) => {
+        if (!touchStartX) return;
+        // Ignore if a modal is open
+        if (document.querySelector('.modal.active, .overlay.active')) return;
+
+        const dx = e.changedTouches[0].clientX - touchStartX;
+        const dy = e.changedTouches[0].clientY - touchStartY;
+        const dt = Date.now() - touchStartTime;
+
+        // Reset
+        touchStartX = 0;
+        touchStartY = 0;
+
+        // Conditions for a valid horizontal swipe:
+        //   • Horizontal movement > 50px
+        //   • Vertical drift < 80px (not a scroll)
+        //   • Completed in < 600ms (not a slow drag)
+        const isHorizontal = Math.abs(dx) > 50 && Math.abs(dy) < 80 && dt < 600;
+        if (!isHorizontal) return;
+
+        if (dx < 0) {
+            // Swipe LEFT → next tab (wraps from last → first)
+            switchView((currentTabIndex + 1) % TAB_ORDER.length);
+        } else {
+            // Swipe RIGHT → previous tab (wraps from first → last)
+            switchView((currentTabIndex - 1 + TAB_ORDER.length) % TAB_ORDER.length);
+        }
+    }, { passive: true });
 
     // --- Misc UI Listeners ---
     // (Other UI listeners can be added here)
+
 
     // --- Alarm Rendering ---
     function renderAlarms() {
