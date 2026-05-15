@@ -51,6 +51,15 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // --- PWA & Notifications ---
+    function requestNotificationPermission() {
+        if ('Notification' in window && Notification.permission === 'default') {
+            Notification.requestPermission();
+        }
+    }
+    
+    requestNotificationPermission();
+
     // --- Shared Helpers ---
     const DAY_MS = 24 * 60 * 60 * 1000;
     const localTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
@@ -714,6 +723,17 @@ document.addEventListener('DOMContentLoaded', () => {
         
         ringingOverlay.classList.add('active');
         startAlarmSound(alarm.sound || 'classic');
+
+        // Show system notification
+        if ('Notification' in window && Notification.permission === 'granted') {
+            const hDisplay = document.getElementById('ringing-time').textContent;
+            new Notification(alarm.label || 'Alarm', {
+                body: isTimer ? "Timer finished!" : `It's ${hDisplay}!`,
+                icon: 'icon.png',
+                vibrate: [200, 100, 200],
+                requireInteraction: true
+            });
+        }
         
         if (!isTimer) {
             setTimeout(() => mathAnswerEl.focus(), 100);
