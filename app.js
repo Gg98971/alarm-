@@ -57,11 +57,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function initCapacitor() {
         if (isCapacitor) {
-            LocalNotifications = window.Capacitor.Plugins.LocalNotifications;
+            const { LocalNotifications, App } = window.Capacitor.Plugins;
+            
+            // Notifications
             const permission = await LocalNotifications.requestPermissions();
             console.log('Native Notification Permission:', permission);
             
-            // Register action types for the notification (to open the app)
             await LocalNotifications.registerActionTypes({
                 types: [
                     {
@@ -73,7 +74,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 ]
             });
 
-            // Listen for notification clicks
             LocalNotifications.addListener('localNotificationActionPerformed', (notification) => {
                 console.log('Notification action performed', notification);
                 const alarmId = notification.notification.extra?.alarmId;
@@ -82,6 +82,29 @@ document.addEventListener('DOMContentLoaded', () => {
                     triggerAlarm(alarm);
                 }
             });
+
+            // Hardware Back Button Handling
+            if (App) {
+                App.addListener('backButton', ({ canGoBack }) => {
+                    const activeModal = document.querySelector('.modal.active, .overlay.active');
+                    if (activeModal) {
+                        activeModal.classList.remove('active');
+                        return;
+                    }
+                    
+                    if (canGoBack) {
+                        window.history.back();
+                    } else {
+                        App.exitApp();
+                    }
+                });
+
+                App.addListener('appStateChange', ({ isActive }) => {
+                    if (isActive) {
+                        renderAlarms();
+                    }
+                });
+            }
         }
     }
 
