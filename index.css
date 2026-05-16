@@ -315,7 +315,7 @@ body {
     padding: 24px;
     display: flex;
     flex-direction: column;
-    gap: 24px;
+    gap: 16px;
 }
 
 .alarm-top {
@@ -353,6 +353,36 @@ body {
     font-size: 0.8rem;
     font-weight: 600;
     opacity: 0.7;
+}
+
+.alarm-right-controls {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 10px;
+}
+
+.alarm-countdown-badge {
+    align-self: flex-start;
+    margin-top: -6px;
+    margin-bottom: 2px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    padding: 6px 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    letter-spacing: 0.3px;
+    transition: all 0.3s ease;
+}
+
+.alarm-countdown-badge.active {
+    color: var(--accent-cyan);
+    border-color: var(--accent-cyan-glow);
+    background: rgba(66, 227, 180, 0.1);
+    box-shadow: 0 0 10px rgba(66, 227, 180, 0.15);
 }
 
 /* Custom Toggle Switch */

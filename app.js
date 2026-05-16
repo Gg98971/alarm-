@@ -57,7 +57,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function initCapacitor() {
         if (isCapacitor) {
-            const { LocalNotifications, App } = window.Capacitor.Plugins;
+            LocalNotifications = window.Capacitor.Plugins.LocalNotifications;
+            const App = window.Capacitor.Plugins.App;
             
             // Notifications
             const permission = await LocalNotifications.requestPermissions();
@@ -76,10 +77,35 @@ document.addEventListener('DOMContentLoaded', () => {
 
             LocalNotifications.addListener('localNotificationActionPerformed', (notification) => {
                 console.log('Notification action performed', notification);
-                const alarmId = notification.notification.extra?.alarmId;
-                const alarm = alarms.find(a => a.id === alarmId);
-                if (alarm) {
-                    triggerAlarm(alarm);
+                const extra = notification.notification?.extra || {};
+                if (extra.isTimer) {
+                    triggerAlarm({
+                        label: 'Timer Finished',
+                        time: '--:--',
+                        sound: 'classic'
+                    }, true);
+                } else if (extra.alarmId) {
+                    const alarm = alarms.find(a => a.id === extra.alarmId);
+                    if (alarm) {
+                        triggerAlarm(alarm);
+                    }
+                }
+            });
+
+            LocalNotifications.addListener('localNotificationReceived', (notification) => {
+                console.log('Notification received', notification);
+                const extra = notification?.extra || {};
+                if (extra.isTimer) {
+                    triggerAlarm({
+                        label: 'Timer Finished',
+                        time: '--:--',
+                        sound: 'classic'
+                    }, true);
+                } else if (extra.alarmId) {
+                    const alarm = alarms.find(a => a.id === extra.alarmId);
+                    if (alarm) {
+                        triggerAlarm(alarm);
+                    }
                 }
             });
 
@@ -102,6 +128,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 App.addListener('appStateChange', ({ isActive }) => {
                     if (isActive) {
                         renderAlarms();
+                        if (typeof updateClocks === 'function') updateClocks();
+                        if (typeof updateTMDisplay === 'function' && tmRunning) {
+                            updateTMDisplay();
+                        }
                     }
                 });
             }
@@ -122,7 +152,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function scheduleNativeAlarm(alarm) {
         if (!isCapacitor || !LocalNotifications || !alarm.active) return;
 
-        // For simplicity, we schedule for the next occurrence of this time
+        // Find next occurrence matching active days
         const [hour, minute] = alarm.time.split(':').map(Number);
         const now = new Date();
         let alarmDate = new Date();
@@ -132,8 +162,14 @@ document.addEventListener('DOMContentLoaded', () => {
             alarmDate.setDate(alarmDate.getDate() + 1);
         }
 
-        // Handle recurring days
-        // (For a robust alarm, we should schedule for each day, but let's start with the next one)
+        // Advance to a valid day if not today/tomorrow
+        if (Array.isArray(alarm.days) && alarm.days.length > 0) {
+            let count = 0;
+            while (!alarm.days.includes(alarmDate.getDay()) && count < 7) {
+                alarmDate.setDate(alarmDate.getDate() + 1);
+                count++;
+            }
+        }
         
         await LocalNotifications.schedule({
             notifications: [
@@ -156,6 +192,31 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!isCapacitor || !LocalNotifications) return;
         await LocalNotifications.cancel({ notifications: [{ id }] });
         console.log(`Cancelled native alarm ${id}`);
+    }
+
+    const TIMER_NOTIFICATION_ID = 999999;
+
+    async function scheduleNativeTimer(endTimeMs) {
+        if (!isCapacitor || !LocalNotifications) return;
+        await LocalNotifications.schedule({
+            notifications: [
+                {
+                    title: 'Timer Finished',
+                    body: "Your timer has ended!",
+                    id: TIMER_NOTIFICATION_ID,
+                    schedule: { at: new Date(endTimeMs), allowWhileIdle: true },
+                    actionTypeId: 'ALARM_ACTION',
+                    extra: { isTimer: true }
+                }
+            ]
+        });
+        console.log(`Scheduled native timer for ${new Date(endTimeMs)}`);
+    }
+
+    async function cancelNativeTimer() {
+        if (!isCapacitor || !LocalNotifications) return;
+        await LocalNotifications.cancel({ notifications: [{ id: TIMER_NOTIFICATION_ID }] });
+        console.log(`Cancelled native timer`);
     }
 
     // --- Shared Helpers ---
@@ -491,9 +552,109 @@ document.addEventListener('DOMContentLoaded', () => {
     // (Other UI listeners can be added here)
 
 
+    // --- Alarm Countdown Helpers ---
+    function getNextAlarmTimestamp(alarm, nowMs = Date.now()) {
+        if (!alarm.active) return Infinity;
+
+        const now = new Date(nowMs);
+        const [hourStr, minuteStr] = alarm.time.split(':');
+        const hour = parseInt(hourStr, 10);
+        const minute = parseInt(minuteStr, 10);
+
+        let targetDate = new Date(now);
+        targetDate.setHours(hour, minute, 0, 0);
+
+        const activeDays = Array.isArray(alarm.days) && alarm.days.length > 0 ? alarm.days : [0, 1, 2, 3, 4, 5, 6];
+        const currentDay = now.getDay();
+
+        if (activeDays.includes(currentDay) && targetDate > now) {
+            // Rings later today
+        } else {
+            for (let i = 1; i <= 7; i++) {
+                const nextDay = (currentDay + i) % 7;
+                if (activeDays.includes(nextDay)) {
+                    targetDate.setDate(targetDate.getDate() + i);
+                    break;
+                }
+            }
+        }
+        return targetDate.getTime();
+    }
+
+    function formatTimeRemaining(diffMs) {
+        if (diffMs <= 0) return 'Ringing...';
+        const totalMinutes = Math.floor(diffMs / 60000);
+        if (totalMinutes === 0) return 'Alarm in less than 1 min';
+
+        const days = Math.floor(totalMinutes / (24 * 60));
+        const hours = Math.floor((totalMinutes % (24 * 60)) / 60);
+        const mins = totalMinutes % 60;
+
+        let parts = [];
+        if (days > 0) parts.push(`${days} ${pluralize(days, 'day')}`);
+        if (hours > 0) parts.push(`${hours} ${pluralize(hours, 'hr')}`);
+        if (mins > 0) parts.push(`${mins} ${pluralize(mins, 'min')}`);
+
+        let timeString = '';
+        if (parts.length === 1) {
+            timeString = parts[0];
+        } else if (parts.length === 2) {
+            timeString = `${parts[0]} and ${parts[1]}`;
+        } else if (parts.length === 3) {
+            timeString = `${parts[0]}, ${parts[1]} and ${parts[2]}`;
+        }
+
+        return `Alarm in ${timeString}`;
+    }
+
+    function updateAllAlarmCountdowns() {
+        const nowMs = Date.now();
+        let needsResort = false;
+
+        document.querySelectorAll('.alarm-countdown-badge').forEach(badge => {
+            const id = Number(badge.dataset.id);
+            const alarm = alarms.find(a => a.id === id);
+            if (!alarm) return;
+
+            if (alarm.active) {
+                const diff = getNextAlarmTimestamp(alarm, nowMs) - nowMs;
+                badge.textContent = formatTimeRemaining(diff);
+                badge.classList.add('active');
+            } else {
+                badge.textContent = 'Alarm off';
+                badge.classList.remove('active');
+            }
+        });
+
+        for (let i = 0; i < alarms.length - 1; i++) {
+            const a = alarms[i];
+            const b = alarms[i + 1];
+            if (a.active && b.active) {
+                if (getNextAlarmTimestamp(a, nowMs) > getNextAlarmTimestamp(b, nowMs)) {
+                    needsResort = true;
+                    break;
+                }
+            }
+        }
+
+        if (needsResort) {
+            renderAlarms();
+        }
+    }
+
     // --- Alarm Rendering ---
     function renderAlarms() {
         alarmList.textContent = '';
+        alarms.sort((a, b) => {
+            if (a.active !== b.active) {
+                return a.active ? -1 : 1;
+            }
+            if (a.active) {
+                return getNextAlarmTimestamp(a) - getNextAlarmTimestamp(b);
+            }
+            return a.time.localeCompare(b.time);
+        });
+
         alarms.forEach(alarm => {
             const [h, m] = alarm.time.split(':');
             const hours = parseInt(h);
@@ -523,6 +684,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 createTextElement('p', 'alarm-label', alarm.label)
             );
 
+            const rightControls = document.createElement('div');
+            rightControls.className = 'alarm-right-controls';
+
             const switchLabel = document.createElement('label');
             switchLabel.className = 'switch';
             const switchInput = document.createElement('input');
@@ -533,7 +697,19 @@ document.addEventListener('DOMContentLoaded', () => {
             switchSlider.className = 'slider round';
             switchLabel.append(switchInput, switchSlider);
 
-            alarmTop.append(timeGroup, switchLabel);
+            const badge = document.createElement('div');
+            badge.className = `alarm-countdown-badge ${alarm.active ? 'active' : ''}`;
+            badge.dataset.id = String(alarm.id);
+            if (alarm.active) {
+                const diff = getNextAlarmTimestamp(alarm) - Date.now();
+                badge.textContent = formatTimeRemaining(diff);
+            } else {
+                badge.textContent = 'Alarm off';
+            }
+
+            rightControls.append(switchLabel);
+
+            alarmTop.append(timeGroup, rightControls);
 
             const dayPills = document.createElement('div');
             dayPills.className = 'day-pills';
@@ -570,10 +746,11 @@ document.addEventListener('DOMContentLoaded', () => {
             actionButtons.append(editButton, deleteButton);
             dayPills.appendChild(actionButtons);
 
-            card.append(alarmTop, dayPills);
+            card.append(alarmTop, badge, dayPills);
             
             // Edit listener (entire card except interactive parts)
             timeGroup.addEventListener('click', () => openAlarmModal(alarm));
+            badge.addEventListener('click', () => openAlarmModal(alarm));
             dayPills.addEventListener('click', (e) => {
                 if (e.target.closest('.delete-alarm-btn')) return;
                 // If clicked on dayPills but NOT a pill (the gap), open modal
@@ -682,8 +859,61 @@ document.addEventListener('DOMContentLoaded', () => {
             if (todayPill) todayPill.classList.add('active');
         }
         
+        updateModalAlarmDiff();
         alarmModal.classList.add('active');
     }
+
+    function updateModalAlarmDiff() {
+        const diffEl = document.getElementById('modal-alarm-diff');
+        if (!diffEl) return;
+        const hour = document.getElementById('new-alarm-hour').value;
+        const minute = document.getElementById('new-alarm-minute').value;
+        const ampm = document.getElementById('new-alarm-ampm').value;
+        let h24 = parseInt(hour, 10);
+        if (ampm === 'PM' && h24 < 12) h24 += 12;
+        if (ampm === 'AM' && h24 === 12) h24 = 0;
+        const m = parseInt(minute, 10);
+
+        const now = new Date();
+        const activeDays = Array.from(modalDayPills)
+            .filter(p => p.classList.contains('active'))
+            .map(p => parseInt(p.dataset.day, 10));
+
+        let targetDate = new Date(now);
+        targetDate.setHours(h24, m, 0, 0);
+
+        if (activeDays.length === 0) {
+            if (targetDate <= now) {
+                targetDate.setDate(targetDate.getDate() + 1);
+            }
+        } else {
+            const currentDay = now.getDay();
+            if (activeDays.includes(currentDay) && targetDate > now) {
+                // Today later on
+            } else {
+                for (let i = 1; i <= 7; i++) {
+                    const nextDay = (currentDay + i) % 7;
+                    if (activeDays.includes(nextDay)) {
+                        targetDate.setDate(targetDate.getDate() + i);
+                        break;
+                    }
+                }
+            }
+        }
+
+        const diffMs = targetDate - now;
+        if (diffMs <= 0) {
+            diffEl.textContent = 'Alarm in --';
+            return;
+        }
+
+        diffEl.textContent = formatTimeRemaining(diffMs);
+    }
+
+    ['new-alarm-hour', 'new-alarm-minute', 'new-alarm-ampm'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('change', updateModalAlarmDiff);
+    });
 
     addAlarmBtn.addEventListener('click', () => openAlarmModal());
 
@@ -692,7 +922,10 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     modalDayPills.forEach(pill => {
-        pill.addEventListener('click', () => pill.classList.toggle('active'));
+        pill.addEventListener('click', () => {
+            pill.classList.toggle('active');
+            updateModalAlarmDiff();
+        });
     });
 
     saveAlarmBtn.addEventListener('click', () => {
@@ -1051,6 +1284,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (userAnswer === currentMathAnswer) {
             ringingOverlay.classList.remove('active');
             stopAlarmSound();
+            if (ringingAlarm && ringingAlarm.active) {
+                scheduleNativeAlarm(ringingAlarm);
+            }
             ringingAlarm = null;
         } else {
             mathChallengeContainer.classList.remove('shake');
@@ -1192,6 +1428,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         // Also check alarms every second
         checkAlarms();
+        updateAllAlarmCountdowns();
     }
 
     function updateTimeDisplay(date, timeZone, timeEl, cardEl) {
@@ -1383,6 +1620,8 @@ document.addEventListener('DOMContentLoaded', () => {
             tmStartPauseBtn.disabled = true;
             lucide.createIcons();
             
+            cancelNativeTimer();
+            
             // Trigger Timer Alarm! (using triggerAlarm with a fake alarm object)
             triggerAlarm({
                 label: 'Timer Finished',
@@ -1420,6 +1659,7 @@ document.addEventListener('DOMContentLoaded', () => {
             tmRunning = false;
             clearInterval(tmInterval);
             setButtonIcon(tmStartPauseBtn, 'play');
+            cancelNativeTimer();
         } else {
             // Start or Resume
             if (tmRemaining === 0) {
@@ -1435,6 +1675,7 @@ document.addEventListener('DOMContentLoaded', () => {
             tmRunning = true;
             tmInterval = setInterval(updateTMDisplay, 50); // fast update for smooth display
             setButtonIcon(tmStartPauseBtn, 'pause');
+            scheduleNativeTimer(tmEndTime);
         }
         lucide.createIcons();
     });
@@ -1442,6 +1683,7 @@ document.addEventListener('DOMContentLoaded', () => {
     tmCancelBtn.addEventListener('click', () => {
         tmRunning = false;
         clearInterval(tmInterval);
+        cancelNativeTimer();
         resetTimerUI();
     });
 

@@ -192,23 +192,27 @@
 
         <!-- Bottom Navigation -->
         <nav class="bottom-nav">
-            <button class="nav-item" data-target="alarms-view">
-                <i data-lucide="alarm-clock"></i>
-                <span>ALARMS</span>
-            </button>
-            <button class="nav-item active" data-target="world-clock-view">
-                <i data-lucide="globe"></i>
-                <span>WORLD CLOCK</span>
-            </button>
-            <button class="nav-item" data-target="stopwatch-view">
-                <i data-lucide="timer"></i>
-                <span>STOPWATCH</span>
-            </button>
-            <button class="nav-item" data-target="timer-view">
-                <i data-lucide="hourglass"></i>
-                <span>TIMER</span>
-            </button>
+            <div class="swipe-dots-bar" id="swipe-dots-bar"></div>
+            <div class="nav-tabs">
+                <button class="nav-item" data-target="alarms-view">
+                    <i data-lucide="alarm-clock"></i>
+                    <span>ALARMS</span>
+                </button>
+                <button class="nav-item active" data-target="world-clock-view">
+                    <i data-lucide="globe"></i>
+                    <span>WORLD CLOCK</span>
+                </button>
+                <button class="nav-item" data-target="stopwatch-view">
+                    <i data-lucide="timer"></i>
+                    <span>STOPWATCH</span>
+                </button>
+                <button class="nav-item" data-target="timer-view">
+                    <i data-lucide="hourglass"></i>
+                    <span>TIMER</span>
+                </button>
+            </div>
         </nav>
+
     </div>
 
     <!-- Modals & Overlays -->
@@ -275,7 +279,10 @@
                 <input type="file" id="custom-audio-upload" accept="audio/*" style="display: none;">
             </div>
             <div class="form-group">
-                <label>Days</label>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <label>Days</label>
+                    <span id="modal-alarm-diff" class="active-text" style="font-size: 0.85rem; font-weight: 500;"></span>
+                </div>
                 <div class="modal-day-pills">
                     <div class="modal-day-pill" data-day="1">M</div>
                     <div class="modal-day-pill" data-day="2">T</div>
