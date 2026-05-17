@@ -54,15 +54,156 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Capacitor Native Bridge ---
     const isCapacitor = window.hasOwnProperty('Capacitor');
     let LocalNotifications = null;
+    let CustomAlarm = null;
+
+    // --- Alarm Data & Helpers (Must be initialized before Capacitor events) ---
+    function generateValidAlarmId(existingId) {
+        let id = Number(existingId);
+        if (Number.isFinite(id) && id > 0 && id <= 2147483647) {
+            return id;
+        }
+        return Math.floor(Math.random() * 1000000000) + 1;
+    }
+
+    function readStoredArray(key, fallback) {
+        try {
+            const stored = JSON.parse(localStorage.getItem(key));
+            return Array.isArray(stored) ? stored : fallback;
+        } catch (e) {
+            console.warn(`Ignoring invalid ${key} data`, e);
+            return fallback;
+        }
+    }
+
+    function normalizeAlarm(alarm) {
+        const safeTime = typeof alarm?.time === 'string' && /^\d{2}:\d{2}$/.test(alarm.time) ? alarm.time : '00:00';
+        const days = Array.isArray(alarm?.days)
+            ? alarm.days.map(Number).filter(day => Number.isInteger(day) && day >= 0 && day <= 6)
+            : [];
+
+        return {
+            id: generateValidAlarmId(alarm?.id),
+            time: safeTime,
+            label: String(alarm?.label || 'Alarm'),
+            active: Boolean(alarm?.active),
+            days: days.length > 0 ? [...new Set(days)] : [0, 1, 2, 3, 4, 5, 6],
+            sound: String(alarm?.sound || 'classic')
+        };
+    }
+
+    let alarms = readStoredArray('alarms', [
+        { id: 1, time: '06:30', label: 'Morning Routine', active: true, days: [1, 2, 3, 4, 5], sound: 'classic' },
+        { id: 2, time: '08:00', label: 'Weekend Sleep In', active: false, days: [6, 0], sound: 'chime' }
+    ]).map(normalizeAlarm);
+
+    async function scheduleNativeAlarm(alarm) {
+        if (!isCapacitor || !alarm.active) return;
+        
+        const CustomAlarm = window.Capacitor?.Plugins?.CustomAlarm;
+        if (!CustomAlarm) return;
+
+        const [hour, minute] = alarm.time.split(':').map(Number);
+        const now = new Date();
+        let alarmDate = new Date();
+        alarmDate.setHours(hour, minute, 0, 0);
+
+        if (alarmDate <= now) {
+            alarmDate.setDate(alarmDate.getDate() + 1);
+        }
+
+        if (Array.isArray(alarm.days) && alarm.days.length > 0) {
+            let count = 0;
+            while (!alarm.days.includes(alarmDate.getDay()) && count < 7) {
+                alarmDate.setDate(alarmDate.getDate() + 1);
+                count++;
+            }
+        }
+        
+        await CustomAlarm.schedule({
+            id: alarm.id,
+            time: alarmDate.getTime()
+        });
+        console.log(`Scheduled native alarm ${alarm.id} for ${alarmDate}`);
+    }
+
+    async function cancelNativeAlarm(id) {
+        if (!isCapacitor) return;
+        
+        const CustomAlarm = window.Capacitor?.Plugins?.CustomAlarm;
+        if (!CustomAlarm) return;
+
+        await CustomAlarm.cancel({ id });
+        console.log(`Cancelled native alarm ${id}`);
+    }
+
+    function saveAlarms() {
+        localStorage.setItem('alarms', JSON.stringify(alarms));
+        alarms.forEach(alarm => {
+            if (alarm.active) {
+                scheduleNativeAlarm(alarm);
+            } else {
+                cancelNativeAlarm(alarm.id);
+            }
+        });
+    }
+
+    const TIMER_NOTIFICATION_ID = 999999;
+
+    async function scheduleNativeTimer(endTimeMs) {
+        if (!isCapacitor) return;
+        
+        const CustomAlarm = window.Capacitor?.Plugins?.CustomAlarm;
+        if (!CustomAlarm) return;
+
+        await CustomAlarm.schedule({
+            id: TIMER_NOTIFICATION_ID,
+            time: endTimeMs
+        });
+        console.log(`Scheduled native timer for ${new Date(endTimeMs)}`);
+    }
+
+    async function cancelNativeTimer() {
+        if (!isCapacitor) return;
+        
+        const CustomAlarm = window.Capacitor?.Plugins?.CustomAlarm;
+        if (!CustomAlarm) return;
+
+        await CustomAlarm.cancel({ id: TIMER_NOTIFICATION_ID });
+        console.log(`Cancelled native timer`);
+    }
 
     async function initCapacitor() {
         if (isCapacitor) {
             LocalNotifications = window.Capacitor.Plugins.LocalNotifications;
             const App = window.Capacitor.Plugins.App;
             
-            // Notifications
-            const permission = await LocalNotifications.requestPermissions();
-            console.log('Native Notification Permission:', permission);
+            // Check and request permissions
+            try {
+                let perm = await LocalNotifications.checkPermissions();
+                if (perm.display !== 'granted') {
+                    perm = await LocalNotifications.requestPermissions();
+                }
+                console.log('Native Notification Permission:', perm);
+            } catch (e) {
+                console.warn('Failed to check/request permissions', e);
+            }
+
+            // Create high importance notification channel
+            try {
+                await LocalNotifications.createChannel({
+                    id: 'alarm_channel',
+                    name: 'Alarms',
+                    description: 'High importance channel for alarm notifications',
+                    importance: 5, // IMPORTANCE_MAX
+                    visibility: 1, // VISIBILITY_PUBLIC
+                    vibration: true
+                });
+            } catch (e) {
+                console.warn('Failed to create notification channel', e);
+            }
+            
+            // Sync current alarms with native scheduler
+            saveAlarms();
             
             await LocalNotifications.registerActionTypes({
                 types: [
@@ -148,94 +289,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     requestNotificationPermission();
-
-    async function scheduleNativeAlarm(alarm) {
-        if (!isCapacitor || !LocalNotifications || !alarm.active) return;
-
-        // Find next occurrence matching active days
-        const [hour, minute] = alarm.time.split(':').map(Number);
-        const now = new Date();
-        let alarmDate = new Date();
-        alarmDate.setHours(hour, minute, 0, 0);
-
-        if (alarmDate <= now) {
-            alarmDate.setDate(alarmDate.getDate() + 1);
-        }
-
-        // Advance to a valid day if not today/tomorrow
-        if (Array.isArray(alarm.days) && alarm.days.length > 0) {
-            let count = 0;
-            while (!alarm.days.includes(alarmDate.getDay()) && count < 7) {
-                alarmDate.setDate(alarmDate.getDate() + 1);
-                count++;
-            }
-        }
-        
-        await LocalNotifications.schedule({
-            notifications: [
-                {
-                    title: alarm.label || 'Alarm',
-                    body: `It's ${alarm.time}! Time to wake up.`,
-                    id: alarm.id,
-                    schedule: { at: alarmDate, allowWhileIdle: true },
-                    sound: 'classic.wav', // Native sound needs to be in res/raw or similar
-                    attachments: [],
-                    actionTypeId: 'ALARM_ACTION',
-                    extra: { alarmId: alarm.id }
-                }
-            ]
-        });
-        console.log(`Scheduled native alarm ${alarm.id} for ${alarmDate}`);
-    }
-
-    async function cancelNativeAlarm(id) {
-        if (!isCapacitor || !LocalNotifications) return;
-        await LocalNotifications.cancel({ notifications: [{ id }] });
-        console.log(`Cancelled native alarm ${id}`);
-    }
-
-    const TIMER_NOTIFICATION_ID = 999999;
-
-    async function scheduleNativeTimer(endTimeMs) {
-        if (!isCapacitor || !LocalNotifications) return;
-        await LocalNotifications.schedule({
-            notifications: [
-                {
-                    title: 'Timer Finished',
-                    body: "Your timer has ended!",
-                    id: TIMER_NOTIFICATION_ID,
-                    schedule: { at: new Date(endTimeMs), allowWhileIdle: true },
-                    actionTypeId: 'ALARM_ACTION',
-                    extra: { isTimer: true }
-                }
-            ]
-        });
-        console.log(`Scheduled native timer for ${new Date(endTimeMs)}`);
-    }
-
-    async function cancelNativeTimer() {
-        if (!isCapacitor || !LocalNotifications) return;
-        await LocalNotifications.cancel({ notifications: [{ id: TIMER_NOTIFICATION_ID }] });
-        console.log(`Cancelled native timer`);
-    }
-
-    // --- Shared Helpers ---
-    const DAY_MS = 24 * 60 * 60 * 1000;
-    const localTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
-    const timeZoneNameOverrides = {
-        'Asia/Calcutta': 'Kolkata',
-        'Etc/UTC': 'UTC'
-    };
-
-    function readStoredArray(key, fallback) {
-        try {
-            const stored = JSON.parse(localStorage.getItem(key));
-            return Array.isArray(stored) ? stored : fallback;
-        } catch (e) {
-            console.warn(`Ignoring invalid ${key} data`, e);
-            return fallback;
-        }
-    }
 
     function createTextElement(tagName, className, text) {
         const element = document.createElement(tagName);
@@ -347,22 +400,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return city.replace(/_/g, ' ');
     }
 
-    function normalizeAlarm(alarm) {
-        const safeTime = typeof alarm?.time === 'string' && /^\d{2}:\d{2}$/.test(alarm.time) ? alarm.time : '00:00';
-        const days = Array.isArray(alarm?.days)
-            ? alarm.days.map(Number).filter(day => Number.isInteger(day) && day >= 0 && day <= 6)
-            : [];
-
-        return {
-            id: Number.isFinite(Number(alarm?.id)) ? Number(alarm.id) : Date.now(),
-            time: safeTime,
-            label: String(alarm?.label || 'Alarm'),
-            active: Boolean(alarm?.active),
-            days: days.length > 0 ? [...new Set(days)] : [0, 1, 2, 3, 4, 5, 6],
-            sound: String(alarm?.sound || 'classic')
-        };
-    }
-
     function getDefaultWorldClocks() {
         const defaults = [
             { id: 'local', name: getCityNameFromTimeZone(localTimeZone), tz: localTimeZone },
@@ -384,25 +421,6 @@ document.addEventListener('DOMContentLoaded', () => {
             name: String(clock?.name || getCityNameFromTimeZone(timeZone)),
             tz: timeZone
         };
-    }
-
-    // --- State & Persistence ---
-    let alarms = readStoredArray('alarms', [
-        { id: 1, time: '06:30', label: 'Morning Routine', active: true, days: [1, 2, 3, 4, 5], sound: 'classic' },
-        { id: 2, time: '08:00', label: 'Weekend Sleep In', active: false, days: [6, 0], sound: 'chime' }
-    ]).map(normalizeAlarm);
-
-    function saveAlarms() {
-        localStorage.setItem('alarms', JSON.stringify(alarms));
-        
-        // Sync with native scheduler
-        alarms.forEach(alarm => {
-            if (alarm.active) {
-                scheduleNativeAlarm(alarm);
-            } else {
-                cancelNativeAlarm(alarm.id);
-            }
-        });
     }
 
     // --- DOM Elements ---
@@ -803,6 +821,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (alarm && alarm.sound && alarm.sound.startsWith('custom_')) {
                         deleteCustomAudio(alarm.sound).catch(console.error);
                     }
+                    cancelNativeAlarm(id);
                     alarms = alarms.filter(a => a.id !== id);
                     saveAlarms();
                     renderAlarms();
@@ -958,7 +977,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         } else {
             const newAlarm = {
-                id: Date.now(),
+                id: generateValidAlarmId(),
                 time: time,
                 label: label,
                 active: true,
