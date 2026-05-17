@@ -1,4 +1,9 @@
 document.addEventListener('DOMContentLoaded', () => {
+    // --- Global Variables ---
+    const localTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const timeZoneNameOverrides = {};
+    const DAY_MS = 24 * 60 * 60 * 1000;
+
     // --- IndexedDB Wrapper ---
     const DB_NAME = 'AlarmAudioDB';
     const DB_VERSION = 1;
