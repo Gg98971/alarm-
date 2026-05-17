@@ -1,4 +1,9 @@
 document.addEventListener('DOMContentLoaded', () => {
+    // --- Global Variables ---
+    const localTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const timeZoneNameOverrides = {};
+    const DAY_MS = 24 * 60 * 60 * 1000;
+
     // --- IndexedDB Wrapper ---
     const DB_NAME = 'AlarmAudioDB';
     const DB_VERSION = 1;
@@ -938,6 +943,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     cancelAlarmBtn.addEventListener('click', () => {
         alarmModal.classList.remove('active');
+        editingAlarmId = null;
     });
 
     modalDayPills.forEach(pill => {
@@ -1001,6 +1007,7 @@ document.addEventListener('DOMContentLoaded', () => {
         modalDayPills.forEach(p => p.classList.remove('active'));
         pendingCustomAudioBlob = null;
         pendingCustomAudioName = null;
+        editingAlarmId = null;
     });
 
     // Sound Preview
