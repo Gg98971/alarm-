@@ -943,6 +943,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     cancelAlarmBtn.addEventListener('click', () => {
         alarmModal.classList.remove('active');
+        editingAlarmId = null;
     });
 
     modalDayPills.forEach(pill => {
@@ -1006,6 +1007,7 @@ document.addEventListener('DOMContentLoaded', () => {
         modalDayPills.forEach(p => p.classList.remove('active'));
         pendingCustomAudioBlob = null;
         pendingCustomAudioName = null;
+        editingAlarmId = null;
     });
 
     // Sound Preview
