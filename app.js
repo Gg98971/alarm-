@@ -1,4 +1,9 @@
 document.addEventListener('DOMContentLoaded', () => {
+    // --- Global Variables ---
+    const localTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const timeZoneNameOverrides = {};
+    const DAY_MS = 24 * 60 * 60 * 1000;
+
     // --- IndexedDB Wrapper ---
     const DB_NAME = 'AlarmAudioDB';
     const DB_VERSION = 1;
@@ -49,6 +54,53 @@ document.addEventListener('DOMContentLoaded', () => {
             request.onsuccess = () => resolve();
             request.onerror = () => reject(request.error);
         });
+    }
+
+    async function getAllCustomAudios() {
+        const db = await initDB();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(STORE_NAME, 'readonly');
+            const store = tx.objectStore(STORE_NAME);
+            const request = store.openCursor();
+            const results = [];
+            request.onsuccess = (e) => {
+                const cursor = e.target.result;
+                if (cursor) {
+                    results.push({ id: cursor.key, blob: cursor.value });
+                    cursor.continue();
+                } else {
+                    resolve(results);
+                }
+            };
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    async function populateCustomSoundOptions() {
+        const soundSelect = document.getElementById('new-alarm-sound');
+        if (!soundSelect) return;
+        
+        // Remove existing dynamically added custom options
+        Array.from(soundSelect.options).forEach(opt => {
+            if (opt.value.startsWith('custom_')) {
+                opt.remove();
+            }
+        });
+        
+        try {
+            const customAudios = await getAllCustomAudios();
+            const customUploadOpt = soundSelect.querySelector('option[value="custom"]');
+            if (!customUploadOpt) return;
+            
+            customAudios.forEach(({ id, blob }) => {
+                const opt = document.createElement('option');
+                opt.value = id;
+                opt.textContent = `Custom: ${blob.name || 'Audio'}`;
+                soundSelect.insertBefore(opt, customUploadOpt);
+            });
+        } catch (e) {
+            console.error("Failed to load custom audio options", e);
+        }
     }
 
     // --- Capacitor Native Bridge ---
@@ -819,7 +871,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     const id = parseInt(btn.dataset.id);
                     const alarm = alarms.find(a => a.id === id);
                     if (alarm && alarm.sound && alarm.sound.startsWith('custom_')) {
-                        deleteCustomAudio(alarm.sound).catch(console.error);
+                        const otherUsers = alarms.filter(a => a.id !== id && a.sound === alarm.sound);
+                        if (otherUsers.length === 0) {
+                            deleteCustomAudio(alarm.sound).then(() => populateCustomSoundOptions()).catch(console.error);
+                        }
                     }
                     cancelNativeAlarm(id);
                     alarms = alarms.filter(a => a.id !== id);
@@ -833,7 +888,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Modal Logic ---
     const modalDayPills = document.querySelectorAll('.modal-day-pill');
 
-    function openAlarmModal(alarm = null) {
+    async function openAlarmModal(alarm = null) {
+        await populateCustomSoundOptions();
         editingAlarmId = alarm ? alarm.id : null;
         const modalTitle = alarmModal.querySelector('h3');
         const saveBtn = document.getElementById('save-alarm');
@@ -938,6 +994,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     cancelAlarmBtn.addEventListener('click', () => {
         alarmModal.classList.remove('active');
+        editingAlarmId = null;
     });
 
     modalDayPills.forEach(pill => {
@@ -947,7 +1004,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    saveAlarmBtn.addEventListener('click', () => {
+    saveAlarmBtn.addEventListener('click', async () => {
         const hour = document.getElementById('new-alarm-hour').value;
         const minute = document.getElementById('new-alarm-minute').value;
         const ampm = document.getElementById('new-alarm-ampm').value;
@@ -988,7 +1045,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (sound.startsWith('custom_') && pendingCustomAudioBlob) {
-            saveCustomAudio(sound, pendingCustomAudioBlob).catch(e => console.error("Failed to save audio", e));
+            try {
+                await saveCustomAudio(sound, pendingCustomAudioBlob);
+                await populateCustomSoundOptions();
+            } catch (e) {
+                console.error("Failed to save audio", e);
+            }
         }
 
         saveAlarms();
@@ -1001,6 +1063,7 @@ document.addEventListener('DOMContentLoaded', () => {
         modalDayPills.forEach(p => p.classList.remove('active'));
         pendingCustomAudioBlob = null;
         pendingCustomAudioName = null;
+        editingAlarmId = null;
     });
 
     // Sound Preview
@@ -1026,14 +1089,11 @@ document.addEventListener('DOMContentLoaded', () => {
             pendingCustomAudioBlob = file;
             pendingCustomAudioName = file.name;
             
-            let customOption = Array.from(soundSelect.options).find(opt => opt.value.startsWith('custom_'));
-            if (!customOption) {
-                customOption = document.createElement('option');
-                soundSelect.insertBefore(customOption, soundSelect.querySelector('option[value="custom"]'));
-            }
             const customId = `custom_${Date.now()}`;
+            const customOption = document.createElement('option');
             customOption.value = customId;
-            customOption.text = file.name;
+            customOption.textContent = `Custom: ${file.name}`;
+            soundSelect.insertBefore(customOption, soundSelect.querySelector('option[value="custom"]'));
             soundSelect.value = customId;
             
             const url = URL.createObjectURL(file);
@@ -1707,7 +1767,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // --- Initialization ---
-    renderAlarms();
+    populateCustomSoundOptions().then(() => {
+        renderAlarms();
+    });
     renderWorldClocks();
     setInterval(updateClocks, 1000);
 });

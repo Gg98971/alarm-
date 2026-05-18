@@ -36,11 +36,16 @@ public class CustomAlarmPlugin extends Plugin {
             PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
         );
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, time, pendingIntent);
-        } else {
-            alarmManager.setExact(AlarmManager.RTC_WAKEUP, time, pendingIntent);
-        }
+        Intent showIntent = new Intent(context, MainActivity.class);
+        PendingIntent showPendingIntent = PendingIntent.getActivity(
+            context,
+            id,
+            showIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+        );
+
+        AlarmManager.AlarmClockInfo alarmClockInfo = new AlarmManager.AlarmClockInfo(time, showPendingIntent);
+        alarmManager.setAlarmClock(alarmClockInfo, pendingIntent);
 
         call.resolve();
     }

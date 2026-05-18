@@ -12,3 +12,6 @@ Thumbs.db
 # Environment variables
 .env
 .env.*
+
+# AI agent directories
+.agents/
