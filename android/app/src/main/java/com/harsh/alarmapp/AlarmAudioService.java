@@ -53,7 +53,7 @@ public class AlarmAudioService extends Service {
         if (CustomAlarmPlugin.instance != null) {
             JSObject data = new JSObject();
             data.put("alarmId", activeAlarmId);
-            CustomAlarmPlugin.instance.notifyListeners("alarmTriggered", data);
+            CustomAlarmPlugin.instance.emitAlarmEvent("alarmTriggered", data);
         }
 
         startAlarmSoundAndVibration();

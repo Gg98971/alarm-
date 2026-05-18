@@ -30,7 +30,7 @@ public class MainActivity extends BridgeActivity {
             if (CustomAlarmPlugin.instance != null) {
                 com.getcapacitor.JSObject data = new com.getcapacitor.JSObject();
                 data.put("alarmId", alarmId);
-                CustomAlarmPlugin.instance.notifyListeners("alarmTriggered", data);
+                CustomAlarmPlugin.instance.emitAlarmEvent("alarmTriggered", data);
             }
         }
     }
@@ -44,7 +44,7 @@ public class MainActivity extends BridgeActivity {
             if (CustomAlarmPlugin.instance != null) {
                 com.getcapacitor.JSObject data = new com.getcapacitor.JSObject();
                 data.put("alarmId", alarmId);
-                CustomAlarmPlugin.instance.notifyListeners("alarmTriggered", data);
+                CustomAlarmPlugin.instance.emitAlarmEvent("alarmTriggered", data);
             }
             intent.removeExtra("isAlarmTrigger");
         }

@@ -16,7 +16,7 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 @CapacitorPlugin(name = "CustomAlarm")
 public class CustomAlarmPlugin extends Plugin {
 
-    public static CustomAlarmPlugin instance;
+    public static CustomAlarmPlugin instance; 
 
     @Override
     public void load() {
@@ -29,6 +29,10 @@ public class CustomAlarmPlugin extends Plugin {
         ret.put("active", AlarmAudioService.isRunning);
         ret.put("alarmId", AlarmAudioService.activeAlarmId);
         call.resolve(ret);
+    }
+
+    public void emitAlarmEvent(String eventName, JSObject data) {
+        notifyListeners(eventName, data);
     }
 
     @PluginMethod
