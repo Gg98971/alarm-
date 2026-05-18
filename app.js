@@ -171,11 +171,25 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         
-        await CustomAlarm.schedule({
-            id: alarm.id,
-            time: alarmDate.getTime()
-        });
-        console.log(`Scheduled native alarm ${alarm.id} for ${alarmDate}`);
+        try {
+            await CustomAlarm.schedule({
+                id: alarm.id,
+                time: alarmDate.getTime()
+            });
+            console.log(`Scheduled native alarm ${alarm.id} for ${alarmDate}`);
+        } catch (err) {
+            console.warn(`Failed to schedule native alarm ${alarm.id}, trying to request exact alarm permission:`, err);
+            try {
+                await CustomAlarm.requestExactAlarmPermission();
+                await CustomAlarm.schedule({
+                    id: alarm.id,
+                    time: alarmDate.getTime()
+                });
+                console.log(`Scheduled native alarm ${alarm.id} after requesting permission`);
+            } catch (retryErr) {
+                console.error(`Retry scheduling native alarm ${alarm.id} failed:`, retryErr);
+            }
+        }
     }
 
     async function cancelNativeAlarm(id) {
@@ -207,11 +221,25 @@ document.addEventListener('DOMContentLoaded', () => {
         const CustomAlarm = window.Capacitor?.Plugins?.CustomAlarm;
         if (!CustomAlarm) return;
 
-        await CustomAlarm.schedule({
-            id: TIMER_NOTIFICATION_ID,
-            time: endTimeMs
-        });
-        console.log(`Scheduled native timer for ${new Date(endTimeMs)}`);
+        try {
+            await CustomAlarm.schedule({
+                id: TIMER_NOTIFICATION_ID,
+                time: endTimeMs
+            });
+            console.log(`Scheduled native timer for ${new Date(endTimeMs)}`);
+        } catch (err) {
+            console.warn('Failed to schedule native timer, trying to request exact alarm permission:', err);
+            try {
+                await CustomAlarm.requestExactAlarmPermission();
+                await CustomAlarm.schedule({
+                    id: TIMER_NOTIFICATION_ID,
+                    time: endTimeMs
+                });
+                console.log(`Scheduled native timer after requesting permission`);
+            } catch (retryErr) {
+                console.error('Retry scheduling native timer failed:', retryErr);
+            }
+        }
     }
 
     async function cancelNativeTimer() {
@@ -238,6 +266,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.log('Native Notification Permission:', perm);
             } catch (e) {
                 console.warn('Failed to check/request permissions', e);
+            }
+
+            const CustomAlarm = window.Capacitor?.Plugins?.CustomAlarm;
+            if (CustomAlarm) {
+                try {
+                    const perm = await CustomAlarm.checkPermissions();
+                    console.log('CustomAlarm Exact Alarm Permission:', perm);
+                    if (perm && perm.exactAlarmGranted === false) {
+                        await CustomAlarm.requestExactAlarmPermission();
+                    }
+                } catch (e) {
+                    console.warn('Failed to check exact alarm permissions:', e);
+                }
             }
 
             // Create high importance notification channel
@@ -318,6 +359,53 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 });
 
+                const checkActiveNativeAlarm = async () => {
+                    const CustomAlarm = window.Capacitor?.Plugins?.CustomAlarm;
+                    if (!CustomAlarm) return;
+                    try {
+                        const res = await CustomAlarm.getActiveAlarm();
+                        console.log('Checked active native alarm:', res);
+                        if (res && res.active) {
+                            if (res.alarmId === TIMER_NOTIFICATION_ID) {
+                                triggerAlarm({
+                                    label: 'Timer Finished',
+                                    time: '--:--',
+                                    sound: 'classic'
+                                }, true);
+                            } else {
+                                const alarm = alarms.find(a => a.id === res.alarmId);
+                                if (alarm) {
+                                    triggerAlarm(alarm);
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('Failed to get active alarm from native:', e);
+                    }
+                };
+
+                const CustomAlarm = window.Capacitor?.Plugins?.CustomAlarm;
+                if (CustomAlarm) {
+                    CustomAlarm.addListener('alarmTriggered', (data) => {
+                        console.log('Native alarm triggered event received:', data);
+                        if (data && data.alarmId !== undefined) {
+                            if (data.alarmId === TIMER_NOTIFICATION_ID) {
+                                triggerAlarm({
+                                    label: 'Timer Finished',
+                                    time: '--:--',
+                                    sound: 'classic'
+                                }, true);
+                            } else {
+                                const alarm = alarms.find(a => a.id === data.alarmId);
+                                if (alarm) {
+                                    triggerAlarm(alarm);
+                                }
+                            }
+                        }
+                    });
+                    checkActiveNativeAlarm();
+                }
+
                 App.addListener('appStateChange', ({ isActive }) => {
                     if (isActive) {
                         renderAlarms();
@@ -325,6 +413,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (typeof updateTMDisplay === 'function' && tmRunning) {
                             updateTMDisplay();
                         }
+                        checkActiveNativeAlarm();
                     }
                 });
             }
@@ -1225,6 +1314,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function stopAlarmSound() {
+        if (isCapacitor) {
+            const CustomAlarm = window.Capacitor?.Plugins?.CustomAlarm;
+            if (CustomAlarm) {
+                CustomAlarm.stopService();
+            }
+        }
         if (beepInterval) {
             clearInterval(beepInterval);
             beepInterval = null;

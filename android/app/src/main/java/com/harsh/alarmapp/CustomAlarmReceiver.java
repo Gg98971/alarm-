@@ -14,43 +14,41 @@ import androidx.core.app.NotificationCompat;
 public class CustomAlarmReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context context, Intent intent) {
-        PowerManager pm = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
-        PowerManager.WakeLock wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "AlarmApp:ReceiverWakeLock");
-        wakeLock.acquire(10000);
+        if (intent != null && "STOP_ALARM".equals(intent.getAction())) {
+            context.stopService(new Intent(context, AlarmAudioService.class));
+            NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm != null) {
+                nm.cancel(999);
+            }
+            return;
+        }
 
-        NotificationManager notificationManager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
-        String channelId = "custom_alarm_channel";
+        PowerManager pm = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
+        if (pm != null) {
+            PowerManager.WakeLock wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "AlarmApp:ReceiverWakeLock");
+            wakeLock.acquire(10000);
+        }
+
+        int alarmId = intent != null ? intent.getIntExtra("alarmId", -1) : -1;
+
+        Intent serviceIntent = new Intent(context, AlarmAudioService.class);
+        serviceIntent.putExtra("alarmId", alarmId);
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            NotificationChannel channel = new NotificationChannel(
-                channelId,
-                "Alarm Wakes",
-                NotificationManager.IMPORTANCE_HIGH
-            );
-            channel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
-            notificationManager.createNotificationChannel(channel);
+            context.startForegroundService(serviceIntent);
+        } else {
+            context.startService(serviceIntent);
         }
 
         Intent fullScreenIntent = new Intent(context, MainActivity.class);
         fullScreenIntent.putExtra("isAlarmTrigger", true);
+        fullScreenIntent.putExtra("alarmId", alarmId);
         fullScreenIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-        
-        PendingIntent fullScreenPendingIntent = PendingIntent.getActivity(
-            context,
-            0,
-            fullScreenIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
-        );
-
-        NotificationCompat.Builder notificationBuilder = new NotificationCompat.Builder(context, channelId)
-            .setSmallIcon(android.R.drawable.ic_dialog_info)
-            .setContentTitle("Alarm Ringing")
-            .setContentText("Tap to stop alarm")
-            .setPriority(NotificationCompat.PRIORITY_MAX)
-            .setCategory(NotificationCompat.CATEGORY_ALARM)
-            .setAutoCancel(true)
-            .setFullScreenIntent(fullScreenPendingIntent, true);
-
-        notificationManager.notify(999, notificationBuilder.build());
+        try {
+            context.startActivity(fullScreenIntent);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 }
+

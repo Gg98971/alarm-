@@ -29,6 +29,13 @@
         </provider>
 
         <receiver android:name=".CustomAlarmReceiver" android:exported="false" />
+
+        <service
+            android:name=".AlarmAudioService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback|specialUse">
+            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE" android:value="Alarm Audio and Vibration" />
+        </service>
     </application>
 
     <!-- Permissions -->
@@ -43,4 +50,6 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 </manifest>
+
