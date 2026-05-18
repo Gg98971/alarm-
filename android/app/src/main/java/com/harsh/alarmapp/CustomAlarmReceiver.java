@@ -31,24 +31,67 @@ public class CustomAlarmReceiver extends BroadcastReceiver {
 
         int alarmId = intent != null ? intent.getIntExtra("alarmId", -1) : -1;
 
-        Intent serviceIntent = new Intent(context, AlarmAudioService.class);
-        serviceIntent.putExtra("alarmId", alarmId);
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            context.startForegroundService(serviceIntent);
-        } else {
-            context.startService(serviceIntent);
+        // Immediately post high priority full screen intent notification
+        String channelId = "custom_alarm_audio_channel";
+        NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && nm != null) {
+            NotificationChannel channel = new NotificationChannel(
+                channelId,
+                "Alarm Audio Service",
+                NotificationManager.IMPORTANCE_HIGH
+            );
+            channel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
+            channel.setSound(null, null);
+            nm.createNotificationChannel(channel);
         }
 
         Intent fullScreenIntent = new Intent(context, MainActivity.class);
         fullScreenIntent.putExtra("isAlarmTrigger", true);
         fullScreenIntent.putExtra("alarmId", alarmId);
         fullScreenIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+
+        PendingIntent fullScreenPendingIntent = PendingIntent.getActivity(
+            context,
+            (alarmId != -1 ? alarmId : 0),
+            fullScreenIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+        );
+
+        Intent stopIntent = new Intent(context, CustomAlarmReceiver.class);
+        stopIntent.setAction("STOP_ALARM");
+        PendingIntent stopPendingIntent = PendingIntent.getBroadcast(
+            context,
+            0,
+            stopIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+        );
+
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(context, channelId)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle("Alarm Ringing!")
+            .setContentText("Tap to open or stop")
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setOngoing(true)
+            .setAutoCancel(false)
+            .setFullScreenIntent(fullScreenPendingIntent, true)
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Stop Alarm", stopPendingIntent);
+
+        if (nm != null) {
+            nm.notify(999, builder.build());
+        }
+
+        Intent serviceIntent = new Intent(context, AlarmAudioService.class);
+        serviceIntent.putExtra("alarmId", alarmId);
+
         try {
-            context.startActivity(fullScreenIntent);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(serviceIntent);
+            } else {
+                context.startService(serviceIntent);
+            }
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
 }
-
