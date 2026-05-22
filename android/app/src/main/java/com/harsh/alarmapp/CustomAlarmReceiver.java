@@ -14,7 +14,15 @@ import androidx.core.app.NotificationCompat;
 public class CustomAlarmReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context context, Intent intent) {
-        if (intent != null && "STOP_ALARM".equals(intent.getAction())) {
+        if (intent == null) return;
+
+        String action = intent.getAction();
+
+        // On boot: alarms are stored in WebView localStorage and can't be
+        // rescheduled from native code. Just return to avoid a false alarm.
+        if ("android.intent.action.BOOT_COMPLETED".equals(action)) return;
+
+        if ("STOP_ALARM".equals(action)) {
             context.stopService(new Intent(context, AlarmAudioService.class));
             NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
             if (nm != null) {
@@ -26,10 +34,10 @@ public class CustomAlarmReceiver extends BroadcastReceiver {
         PowerManager pm = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
         if (pm != null) {
             PowerManager.WakeLock wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "AlarmApp:ReceiverWakeLock");
-            wakeLock.acquire(10000);
+            wakeLock.acquire(30000);
         }
 
-        int alarmId = intent != null ? intent.getIntExtra("alarmId", -1) : -1;
+        int alarmId = intent.getIntExtra("alarmId", -1);
 
         // Immediately post high priority full screen intent notification
         String channelId = "custom_alarm_audio_channel";

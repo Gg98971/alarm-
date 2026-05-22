@@ -8,10 +8,6 @@ import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ServiceInfo;
-import android.media.AudioAttributes;
-import android.media.MediaPlayer;
-import android.media.RingtoneManager;
-import android.net.Uri;
 import android.os.Build;
 import android.os.IBinder;
 import android.os.PowerManager;
@@ -24,7 +20,6 @@ public class AlarmAudioService extends Service {
     public static boolean isRunning = false;
     public static int activeAlarmId = -1;
 
-    private MediaPlayer mediaPlayer;
     private Vibrator vibrator;
     private PowerManager.WakeLock wakeLock;
 
@@ -36,10 +31,13 @@ public class AlarmAudioService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
+    }
+
+    private void acquireWakeLock() {
         PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
         if (pm != null) {
             wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP, "AlarmApp:AudioServiceWakeLock");
-            wakeLock.acquire(10 * 60 * 1000L); // 10 minutes max
+            wakeLock.acquire();
         }
     }
 
@@ -56,35 +54,14 @@ public class AlarmAudioService extends Service {
             CustomAlarmPlugin.instance.emitAlarmEvent("alarmTriggered", data);
         }
 
-        startAlarmSoundAndVibration();
+        acquireWakeLock();
+        startVibration();
         startForegroundNotification();
 
         return START_STICKY;
     }
 
-    private void startAlarmSoundAndVibration() {
-        if (mediaPlayer == null) {
-            try {
-                android.net.Uri alarmUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
-                if (alarmUri == null) {
-                    alarmUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE);
-                }
-                if (alarmUri != null) {
-                    mediaPlayer = new MediaPlayer();
-                    mediaPlayer.setDataSource(this, alarmUri);
-                    mediaPlayer.setAudioAttributes(new AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_ALARM)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                        .build());
-                    mediaPlayer.setLooping(true);
-                    mediaPlayer.prepare();
-                    mediaPlayer.start();
-                }
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        }
-
+    private void startVibration() {
         if (vibrator == null) {
             vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
             if (vibrator != null) {
@@ -150,16 +127,18 @@ public class AlarmAudioService extends Service {
         Notification notification = builder.build();
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            int types = 0;
-            if (Build.VERSION.SDK_INT >= 34) { // API 34+
-                types = ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK | ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE;
+            if (Build.VERSION.SDK_INT >= 34) {
+                try {
+                    startForeground(999, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
+                } catch (Exception e) {
+                    startForeground(999, notification);
+                }
             } else {
-                types = ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK;
-            }
-            try {
-                startForeground(999, notification, types);
-            } catch (Exception e) {
-                startForeground(999, notification);
+                try {
+                    startForeground(999, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
+                } catch (Exception e) {
+                    startForeground(999, notification);
+                }
             }
         } else {
             startForeground(999, notification);
@@ -171,18 +150,6 @@ public class AlarmAudioService extends Service {
         super.onDestroy();
         isRunning = false;
         activeAlarmId = -1;
-
-        if (mediaPlayer != null) {
-            try {
-                if (mediaPlayer.isPlaying()) {
-                    mediaPlayer.stop();
-                }
-                mediaPlayer.release();
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-            mediaPlayer = null;
-        }
 
         if (vibrator != null) {
             try {

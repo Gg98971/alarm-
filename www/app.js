@@ -266,6 +266,31 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 });
 
+                const checkActiveNativeAlarm = async () => {
+                    const CustomAlarm = window.Capacitor?.Plugins?.CustomAlarm;
+                    if (!CustomAlarm) return;
+                    try {
+                        const res = await CustomAlarm.getActiveAlarm();
+                        console.log('Checked active native alarm:', res);
+                        if (res && res.active) {
+                            if (res.alarmId === TIMER_NOTIFICATION_ID) {
+                                triggerAlarm({
+                                    label: 'Timer Finished',
+                                    time: '--:--',
+                                    sound: 'classic'
+                                }, true);
+                            } else {
+                                const alarm = alarms.find(a => a.id === res.alarmId);
+                                if (alarm) {
+                                    triggerAlarm(alarm);
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        console.warn('Failed to get active alarm from native:', e);
+                    }
+                };
+
                 App.addListener('appStateChange', ({ isActive }) => {
                     if (isActive) {
                         renderAlarms();
@@ -273,6 +298,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (typeof updateTMDisplay === 'function' && tmRunning) {
                             updateTMDisplay();
                         }
+                        checkActiveNativeAlarm();
                     }
                 });
             }
@@ -1252,6 +1278,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let isTimerRinging = false;
 
     function triggerAlarm(alarm, isTimer = false) {
+        initAudio();
         ringingAlarm = alarm;
         isTimerRinging = isTimer;
         document.getElementById('ringing-label').textContent = alarm.label;
@@ -1289,10 +1316,20 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    function stopAlarmService() {
+        if (isCapacitor) {
+            const CustomAlarm = window.Capacitor?.Plugins?.CustomAlarm;
+            if (CustomAlarm) {
+                CustomAlarm.stopService();
+            }
+        }
+    }
+
     function attemptStopAlarm() {
         if (isTimerRinging) {
             ringingOverlay.classList.remove('active');
             stopAlarmSound();
+            stopAlarmService();
             ringingAlarm = null;
             isTimerRinging = false;
             mathAnswerEl.value = '';
@@ -1303,6 +1340,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (userAnswer === currentMathAnswer) {
             ringingOverlay.classList.remove('active');
             stopAlarmSound();
+            stopAlarmService();
             if (ringingAlarm && ringingAlarm.active) {
                 scheduleNativeAlarm(ringingAlarm);
             }
@@ -1640,6 +1678,8 @@ document.addEventListener('DOMContentLoaded', () => {
             lucide.createIcons();
             
             cancelNativeTimer();
+            localStorage.removeItem('tmEndTime');
+            localStorage.removeItem('tmDuration');
             
             // Trigger Timer Alarm! (using triggerAlarm with a fake alarm object)
             triggerAlarm({
@@ -1672,6 +1712,16 @@ document.addEventListener('DOMContentLoaded', () => {
         tmRemaining = 0;
     }
 
+    function saveTimerState() {
+        if (tmRunning && tmEndTime > 0) {
+            localStorage.setItem('tmEndTime', tmEndTime);
+            localStorage.setItem('tmDuration', getSelectedTMDuration());
+        } else {
+            localStorage.removeItem('tmEndTime');
+            localStorage.removeItem('tmDuration');
+        }
+    }
+
     tmStartPauseBtn.addEventListener('click', () => {
         if (tmRunning) {
             // Pause
@@ -1679,6 +1729,7 @@ document.addEventListener('DOMContentLoaded', () => {
             clearInterval(tmInterval);
             setButtonIcon(tmStartPauseBtn, 'play');
             cancelNativeTimer();
+            saveTimerState();
         } else {
             // Start or Resume
             if (tmRemaining === 0) {
@@ -1695,6 +1746,7 @@ document.addEventListener('DOMContentLoaded', () => {
             tmInterval = setInterval(updateTMDisplay, 50); // fast update for smooth display
             setButtonIcon(tmStartPauseBtn, 'pause');
             scheduleNativeTimer(tmEndTime);
+            saveTimerState();
         }
         lucide.createIcons();
     });
@@ -1703,11 +1755,38 @@ document.addEventListener('DOMContentLoaded', () => {
         tmRunning = false;
         clearInterval(tmInterval);
         cancelNativeTimer();
+        localStorage.removeItem('tmEndTime');
+        localStorage.removeItem('tmDuration');
         resetTimerUI();
     });
+
+    function restoreTimerState() {
+        const savedEndTime = localStorage.getItem('tmEndTime');
+        if (savedEndTime) {
+            const endTime = parseInt(savedEndTime, 10);
+            const remaining = endTime - Date.now();
+            if (remaining > 0) {
+                tmRunning = true;
+                tmEndTime = endTime;
+                tmRemaining = remaining;
+                tmInputContainer.classList.add('hidden');
+                tmDisplay.classList.remove('hidden');
+                tmCancelBtn.disabled = false;
+                tmDisplay.textContent = formatTimeTM(tmRemaining);
+                tmInterval = setInterval(updateTMDisplay, 50);
+                setButtonIcon(tmStartPauseBtn, 'pause');
+                lucide.createIcons();
+                scheduleNativeTimer(tmEndTime);
+            } else {
+                localStorage.removeItem('tmEndTime');
+                localStorage.removeItem('tmDuration');
+            }
+        }
+    }
 
     // --- Initialization ---
     renderAlarms();
     renderWorldClocks();
+    restoreTimerState();
     setInterval(updateClocks, 1000);
 });
