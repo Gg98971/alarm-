@@ -279,10 +279,18 @@ document.addEventListener('DOMContentLoaded', () => {
                                     time: '--:--',
                                     sound: 'classic'
                                 }, true);
-                            } else {
+                            } else if (res.alarmId !== undefined && res.alarmId !== -1) {
                                 const alarm = alarms.find(a => a.id === res.alarmId);
                                 if (alarm) {
                                     triggerAlarm(alarm);
+                                }
+                            } else {
+                                if (!ringingAlarm) {
+                                    triggerAlarm({
+                                        label: 'Alarm',
+                                        time: '--:--',
+                                        sound: 'classic'
+                                    });
                                 }
                             }
                         }
@@ -301,6 +309,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         checkActiveNativeAlarm();
                     }
                 });
+
+                checkActiveNativeAlarm();
             }
         }
     }

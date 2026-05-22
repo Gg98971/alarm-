@@ -372,10 +372,20 @@ document.addEventListener('DOMContentLoaded', () => {
                                     time: '--:--',
                                     sound: 'classic'
                                 }, true);
-                            } else {
+                            } else if (res.alarmId !== undefined && res.alarmId !== -1) {
                                 const alarm = alarms.find(a => a.id === res.alarmId);
                                 if (alarm) {
                                     triggerAlarm(alarm);
+                                }
+                            } else {
+                                // Service running but no specific alarm ID (START_STICKY restart)
+                                // Trigger generic alarm so user at least gets the UI+sound
+                                if (!ringingAlarm) {
+                                    triggerAlarm({
+                                        label: 'Alarm',
+                                        time: '--:--',
+                                        sound: 'classic'
+                                    });
                                 }
                             }
                         }
@@ -403,8 +413,8 @@ document.addEventListener('DOMContentLoaded', () => {
                             }
                         }
                     });
-                    checkActiveNativeAlarm();
                 }
+                checkActiveNativeAlarm();
 
                 App.addListener('appStateChange', ({ isActive }) => {
                     if (isActive) {

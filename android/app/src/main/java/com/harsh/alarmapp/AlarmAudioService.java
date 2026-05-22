@@ -8,6 +8,9 @@ import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ServiceInfo;
+import android.media.AudioAttributes;
+import android.media.MediaPlayer;
+import android.media.RingtoneManager;
 import android.os.Build;
 import android.os.IBinder;
 import android.os.PowerManager;
@@ -20,6 +23,7 @@ public class AlarmAudioService extends Service {
     public static boolean isRunning = false;
     public static int activeAlarmId = -1;
 
+    private MediaPlayer mediaPlayer;
     private Vibrator vibrator;
     private PowerManager.WakeLock wakeLock;
 
@@ -31,13 +35,33 @@ public class AlarmAudioService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
-    }
-
-    private void acquireWakeLock() {
         PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
         if (pm != null) {
             wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP, "AlarmApp:AudioServiceWakeLock");
             wakeLock.acquire();
+        }
+    }
+
+    private void startAlarmSound() {
+        if (mediaPlayer != null) return;
+        try {
+            android.net.Uri alarmUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
+            if (alarmUri == null) {
+                alarmUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE);
+            }
+            if (alarmUri != null) {
+                mediaPlayer = new MediaPlayer();
+                mediaPlayer.setDataSource(this, alarmUri);
+                mediaPlayer.setAudioAttributes(new AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ALARM)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                    .build());
+                mediaPlayer.setLooping(true);
+                mediaPlayer.prepare();
+                mediaPlayer.start();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
 
@@ -54,7 +78,7 @@ public class AlarmAudioService extends Service {
             CustomAlarmPlugin.instance.emitAlarmEvent("alarmTriggered", data);
         }
 
-        acquireWakeLock();
+        startAlarmSound();
         startVibration();
         startForegroundNotification();
 
@@ -62,15 +86,14 @@ public class AlarmAudioService extends Service {
     }
 
     private void startVibration() {
-        if (vibrator == null) {
-            vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
-            if (vibrator != null) {
-                long[] pattern = {0, 500, 500};
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    vibrator.vibrate(VibrationEffect.createWaveform(pattern, 0));
-                } else {
-                    vibrator.vibrate(pattern, 0);
-                }
+        if (vibrator != null) return;
+        vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
+        if (vibrator != null) {
+            long[] pattern = {0, 500, 500};
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vibrator.vibrate(VibrationEffect.createWaveform(pattern, 0));
+            } else {
+                vibrator.vibrate(pattern, 0);
             }
         }
     }
@@ -127,18 +150,11 @@ public class AlarmAudioService extends Service {
         Notification notification = builder.build();
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            if (Build.VERSION.SDK_INT >= 34) {
-                try {
-                    startForeground(999, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);
-                } catch (Exception e) {
-                    startForeground(999, notification);
-                }
-            } else {
-                try {
-                    startForeground(999, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);
-                } catch (Exception e) {
-                    startForeground(999, notification);
-                }
+            int types = ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK | ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE;
+            try {
+                startForeground(999, notification, types);
+            } catch (Exception e) {
+                startForeground(999, notification);
             }
         } else {
             startForeground(999, notification);
@@ -150,6 +166,18 @@ public class AlarmAudioService extends Service {
         super.onDestroy();
         isRunning = false;
         activeAlarmId = -1;
+
+        if (mediaPlayer != null) {
+            try {
+                if (mediaPlayer.isPlaying()) {
+                    mediaPlayer.stop();
+                }
+                mediaPlayer.release();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            mediaPlayer = null;
+        }
 
         if (vibrator != null) {
             try {
