@@ -174,7 +174,11 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             await CustomAlarm.schedule({
                 id: alarm.id,
-                time: alarmDate.getTime()
+                time: alarmDate.getTime(),
+                label: alarm.label,
+                active: alarm.active,
+                days: alarm.days,
+                sound: alarm.sound
             });
             console.log(`Scheduled native alarm ${alarm.id} for ${alarmDate}`);
         } catch (err) {
@@ -183,7 +187,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 await CustomAlarm.requestExactAlarmPermission();
                 await CustomAlarm.schedule({
                     id: alarm.id,
-                    time: alarmDate.getTime()
+                    time: alarmDate.getTime(),
+                    label: alarm.label,
+                    active: alarm.active,
+                    days: alarm.days,
+                    sound: alarm.sound
                 });
                 console.log(`Scheduled native alarm ${alarm.id} after requesting permission`);
             } catch (retryErr) {
@@ -224,7 +232,11 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             await CustomAlarm.schedule({
                 id: TIMER_NOTIFICATION_ID,
-                time: endTimeMs
+                time: endTimeMs,
+                label: 'Timer',
+                active: true,
+                days: [0,1,2,3,4,5,6],
+                sound: 'classic'
             });
             console.log(`Scheduled native timer for ${new Date(endTimeMs)}`);
         } catch (err) {
@@ -233,7 +245,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 await CustomAlarm.requestExactAlarmPermission();
                 await CustomAlarm.schedule({
                     id: TIMER_NOTIFICATION_ID,
-                    time: endTimeMs
+                    time: endTimeMs,
+                    label: 'Timer',
+                    active: true,
+                    days: [0,1,2,3,4,5,6],
+                    sound: 'classic'
                 });
                 console.log(`Scheduled native timer after requesting permission`);
             } catch (retryErr) {

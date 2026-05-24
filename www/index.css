@@ -25,6 +25,9 @@ body {
     align-items: center;
     min-height: 100vh;
     margin: 0;
+    overscroll-behavior-y: none;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 .app-container {
@@ -45,7 +48,7 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 24px 24px 16px;
+    padding: calc(24px + env(safe-area-inset-top, 0px)) 24px 16px;
 }
 
 .icon-btn {
@@ -56,8 +59,9 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 8px;
-    margin-left: -8px;
+    min-width: 48px;
+    min-height: 48px;
+    margin-left: -12px;
 }
 
 .icon-btn i {
@@ -90,8 +94,9 @@ body {
     overflow-y: auto;
     overflow-x: hidden; /* prevent horizontal bleed during slide transitions */
     padding: 0 24px;
-    padding-bottom: 100px; /* Space for bottom nav */
+    padding-bottom: calc(110px + env(safe-area-inset-bottom, 16px)); /* Space for bottom nav */
     position: relative;
+    -webkit-overflow-scrolling: touch;
 }
 
 /* View switching — slide-based for swipe support */
@@ -447,6 +452,7 @@ input:checked + .slider:before {
     display: flex;
     gap: 8px;
     align-items: center;
+    flex-wrap: wrap;
 }
 
 .day-pill {
@@ -479,23 +485,24 @@ input:checked + .slider:before {
     display: flex;
     align-items: center;
     justify-content: center;
+    min-width: 48px;
+    min-height: 48px;
     flex-shrink: 0;
 }
 
 .delete-alarm-btn {
     margin-left: auto;
-    padding: 4px;
 }
 
 .delete-alarm-btn i,
 .delete-alarm-btn svg {
-    width: 18px;
-    height: 18px;
+    width: 20px;
+    height: 20px;
 }
 
 .alarm-action-buttons {
     display: flex;
-    gap: 12px;
+    gap: 4px;
     margin-left: auto;
     align-items: center;
 }
@@ -508,7 +515,8 @@ input:checked + .slider:before {
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 4px;
+    min-width: 48px;
+    min-height: 48px;
     transition: color 0.2s ease, transform 0.2s ease;
 }
 
@@ -522,19 +530,18 @@ input:checked + .slider:before {
 
 .edit-alarm-btn i,
 .edit-alarm-btn svg {
-    width: 18px;
-    height: 18px;
+    width: 20px;
+    height: 20px;
 }
 
 .delete-clock-btn {
     opacity: 0.65;
-    padding: 4px;
 }
 
 .delete-clock-btn i,
 .delete-clock-btn svg {
-    width: 16px;
-    height: 16px;
+    width: 20px;
+    height: 20px;
 }
 
 
@@ -619,9 +626,10 @@ input:checked + .slider:before {
     color: #000;
 }
 
-@media (max-width: 414px) {
+@media (max-width: 600px) {
     .app-container {
         height: 100dvh;
+        max-width: none;
         max-height: none;
         border-radius: 0;
         box-shadow: none;
@@ -657,6 +665,7 @@ input:checked + .slider:before {
     display: flex;
     flex-direction: column;
     gap: 24px;
+    -webkit-overflow-scrolling: touch;
 }
 
 .modal-content h3 {
@@ -709,14 +718,15 @@ input:checked + .slider:before {
 
 .modal-day-pill {
     flex: 1 1 0;
-    max-width: 36px;
+    max-width: 42px;
+    min-height: 38px;
     aspect-ratio: 1;
     border-radius: 50%;
     display: flex;
     justify-content: center;
     align-items: center;
     border: 1px solid #374151;
-    font-size: 0.8rem;
+    font-size: 0.85rem;
     cursor: pointer;
 }
 

@@ -16,3 +16,6 @@ Thumbs.db
 # AI agent directories
 .agents/
 graphify-out/
+
+# Android build artifacts
+*.apk

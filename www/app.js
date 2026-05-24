@@ -1,4 +1,9 @@
 document.addEventListener('DOMContentLoaded', () => {
+    // --- Global Variables ---
+    const localTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const timeZoneNameOverrides = {};
+    const DAY_MS = 24 * 60 * 60 * 1000;
+
     // --- IndexedDB Wrapper ---
     const DB_NAME = 'AlarmAudioDB';
     const DB_VERSION = 1;
@@ -49,6 +54,53 @@ document.addEventListener('DOMContentLoaded', () => {
             request.onsuccess = () => resolve();
             request.onerror = () => reject(request.error);
         });
+    }
+
+    async function getAllCustomAudios() {
+        const db = await initDB();
+        return new Promise((resolve, reject) => {
+            const tx = db.transaction(STORE_NAME, 'readonly');
+            const store = tx.objectStore(STORE_NAME);
+            const request = store.openCursor();
+            const results = [];
+            request.onsuccess = (e) => {
+                const cursor = e.target.result;
+                if (cursor) {
+                    results.push({ id: cursor.key, blob: cursor.value });
+                    cursor.continue();
+                } else {
+                    resolve(results);
+                }
+            };
+            request.onerror = () => reject(request.error);
+        });
+    }
+
+    async function populateCustomSoundOptions() {
+        const soundSelect = document.getElementById('new-alarm-sound');
+        if (!soundSelect) return;
+        
+        // Remove existing dynamically added custom options
+        Array.from(soundSelect.options).forEach(opt => {
+            if (opt.value.startsWith('custom_')) {
+                opt.remove();
+            }
+        });
+        
+        try {
+            const customAudios = await getAllCustomAudios();
+            const customUploadOpt = soundSelect.querySelector('option[value="custom"]');
+            if (!customUploadOpt) return;
+            
+            customAudios.forEach(({ id, blob }) => {
+                const opt = document.createElement('option');
+                opt.value = id;
+                opt.textContent = `Custom: ${blob.name || 'Audio'}`;
+                soundSelect.insertBefore(opt, customUploadOpt);
+            });
+        } catch (e) {
+            console.error("Failed to load custom audio options", e);
+        }
     }
 
     // --- Capacitor Native Bridge ---
@@ -119,11 +171,33 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         
-        await CustomAlarm.schedule({
-            id: alarm.id,
-            time: alarmDate.getTime()
-        });
-        console.log(`Scheduled native alarm ${alarm.id} for ${alarmDate}`);
+        try {
+            await CustomAlarm.schedule({
+                id: alarm.id,
+                time: alarmDate.getTime(),
+                label: alarm.label,
+                active: alarm.active,
+                days: alarm.days,
+                sound: alarm.sound
+            });
+            console.log(`Scheduled native alarm ${alarm.id} for ${alarmDate}`);
+        } catch (err) {
+            console.warn(`Failed to schedule native alarm ${alarm.id}, trying to request exact alarm permission:`, err);
+            try {
+                await CustomAlarm.requestExactAlarmPermission();
+                await CustomAlarm.schedule({
+                    id: alarm.id,
+                    time: alarmDate.getTime(),
+                    label: alarm.label,
+                    active: alarm.active,
+                    days: alarm.days,
+                    sound: alarm.sound
+                });
+                console.log(`Scheduled native alarm ${alarm.id} after requesting permission`);
+            } catch (retryErr) {
+                console.error(`Retry scheduling native alarm ${alarm.id} failed:`, retryErr);
+            }
+        }
     }
 
     async function cancelNativeAlarm(id) {
@@ -155,11 +229,33 @@ document.addEventListener('DOMContentLoaded', () => {
         const CustomAlarm = window.Capacitor?.Plugins?.CustomAlarm;
         if (!CustomAlarm) return;
 
-        await CustomAlarm.schedule({
-            id: TIMER_NOTIFICATION_ID,
-            time: endTimeMs
-        });
-        console.log(`Scheduled native timer for ${new Date(endTimeMs)}`);
+        try {
+            await CustomAlarm.schedule({
+                id: TIMER_NOTIFICATION_ID,
+                time: endTimeMs,
+                label: 'Timer',
+                active: true,
+                days: [0,1,2,3,4,5,6],
+                sound: 'classic'
+            });
+            console.log(`Scheduled native timer for ${new Date(endTimeMs)}`);
+        } catch (err) {
+            console.warn('Failed to schedule native timer, trying to request exact alarm permission:', err);
+            try {
+                await CustomAlarm.requestExactAlarmPermission();
+                await CustomAlarm.schedule({
+                    id: TIMER_NOTIFICATION_ID,
+                    time: endTimeMs,
+                    label: 'Timer',
+                    active: true,
+                    days: [0,1,2,3,4,5,6],
+                    sound: 'classic'
+                });
+                console.log(`Scheduled native timer after requesting permission`);
+            } catch (retryErr) {
+                console.error('Retry scheduling native timer failed:', retryErr);
+            }
+        }
     }
 
     async function cancelNativeTimer() {
@@ -186,6 +282,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.log('Native Notification Permission:', perm);
             } catch (e) {
                 console.warn('Failed to check/request permissions', e);
+            }
+
+            const CustomAlarm = window.Capacitor?.Plugins?.CustomAlarm;
+            if (CustomAlarm) {
+                try {
+                    const perm = await CustomAlarm.checkPermissions();
+                    console.log('CustomAlarm Exact Alarm Permission:', perm);
+                    if (perm && perm.exactAlarmGranted === false) {
+                        await CustomAlarm.requestExactAlarmPermission();
+                    }
+                } catch (e) {
+                    console.warn('Failed to check exact alarm permissions:', e);
+                }
             }
 
             // Create high importance notification channel
@@ -285,6 +394,8 @@ document.addEventListener('DOMContentLoaded', () => {
                                     triggerAlarm(alarm);
                                 }
                             } else {
+                                // Service running but no specific alarm ID (START_STICKY restart)
+                                // Trigger generic alarm so user at least gets the UI+sound
                                 if (!ringingAlarm) {
                                     triggerAlarm({
                                         label: 'Alarm',
@@ -299,6 +410,28 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 };
 
+                const CustomAlarm = window.Capacitor?.Plugins?.CustomAlarm;
+                if (CustomAlarm) {
+                    CustomAlarm.addListener('alarmTriggered', (data) => {
+                        console.log('Native alarm triggered event received:', data);
+                        if (data && data.alarmId !== undefined) {
+                            if (data.alarmId === TIMER_NOTIFICATION_ID) {
+                                triggerAlarm({
+                                    label: 'Timer Finished',
+                                    time: '--:--',
+                                    sound: 'classic'
+                                }, true);
+                            } else {
+                                const alarm = alarms.find(a => a.id === data.alarmId);
+                                if (alarm) {
+                                    triggerAlarm(alarm);
+                                }
+                            }
+                        }
+                    });
+                }
+                checkActiveNativeAlarm();
+
                 App.addListener('appStateChange', ({ isActive }) => {
                     if (isActive) {
                         renderAlarms();
@@ -309,8 +442,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         checkActiveNativeAlarm();
                     }
                 });
-
-                checkActiveNativeAlarm();
             }
         }
     }
@@ -855,7 +986,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     const id = parseInt(btn.dataset.id);
                     const alarm = alarms.find(a => a.id === id);
                     if (alarm && alarm.sound && alarm.sound.startsWith('custom_')) {
-                        deleteCustomAudio(alarm.sound).catch(console.error);
+                        const otherUsers = alarms.filter(a => a.id !== id && a.sound === alarm.sound);
+                        if (otherUsers.length === 0) {
+                            deleteCustomAudio(alarm.sound).then(() => populateCustomSoundOptions()).catch(console.error);
+                        }
                     }
                     cancelNativeAlarm(id);
                     alarms = alarms.filter(a => a.id !== id);
@@ -869,7 +1003,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Modal Logic ---
     const modalDayPills = document.querySelectorAll('.modal-day-pill');
 
-    function openAlarmModal(alarm = null) {
+    async function openAlarmModal(alarm = null) {
+        await populateCustomSoundOptions();
         editingAlarmId = alarm ? alarm.id : null;
         const modalTitle = alarmModal.querySelector('h3');
         const saveBtn = document.getElementById('save-alarm');
@@ -974,6 +1109,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     cancelAlarmBtn.addEventListener('click', () => {
         alarmModal.classList.remove('active');
+        editingAlarmId = null;
     });
 
     modalDayPills.forEach(pill => {
@@ -983,7 +1119,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    saveAlarmBtn.addEventListener('click', () => {
+    saveAlarmBtn.addEventListener('click', async () => {
         const hour = document.getElementById('new-alarm-hour').value;
         const minute = document.getElementById('new-alarm-minute').value;
         const ampm = document.getElementById('new-alarm-ampm').value;
@@ -1024,7 +1160,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         if (sound.startsWith('custom_') && pendingCustomAudioBlob) {
-            saveCustomAudio(sound, pendingCustomAudioBlob).catch(e => console.error("Failed to save audio", e));
+            try {
+                await saveCustomAudio(sound, pendingCustomAudioBlob);
+                await populateCustomSoundOptions();
+            } catch (e) {
+                console.error("Failed to save audio", e);
+            }
         }
 
         saveAlarms();
@@ -1037,6 +1178,7 @@ document.addEventListener('DOMContentLoaded', () => {
         modalDayPills.forEach(p => p.classList.remove('active'));
         pendingCustomAudioBlob = null;
         pendingCustomAudioName = null;
+        editingAlarmId = null;
     });
 
     // Sound Preview
@@ -1062,14 +1204,11 @@ document.addEventListener('DOMContentLoaded', () => {
             pendingCustomAudioBlob = file;
             pendingCustomAudioName = file.name;
             
-            let customOption = Array.from(soundSelect.options).find(opt => opt.value.startsWith('custom_'));
-            if (!customOption) {
-                customOption = document.createElement('option');
-                soundSelect.insertBefore(customOption, soundSelect.querySelector('option[value="custom"]'));
-            }
             const customId = `custom_${Date.now()}`;
+            const customOption = document.createElement('option');
             customOption.value = customId;
-            customOption.text = file.name;
+            customOption.textContent = `Custom: ${file.name}`;
+            soundSelect.insertBefore(customOption, soundSelect.querySelector('option[value="custom"]'));
             soundSelect.value = customId;
             
             const url = URL.createObjectURL(file);
@@ -1200,6 +1339,15 @@ document.addEventListener('DOMContentLoaded', () => {
         beepInterval = setInterval(pattern, intervalMs);
     }
 
+    function stopAlarmService() {
+        if (isCapacitor) {
+            const CustomAlarm = window.Capacitor?.Plugins?.CustomAlarm;
+            if (CustomAlarm) {
+                CustomAlarm.stopService();
+            }
+        }
+    }
+
     function stopAlarmSound() {
         if (beepInterval) {
             clearInterval(beepInterval);
@@ -1323,15 +1471,6 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (!isTimer) {
             setTimeout(() => mathAnswerEl.focus(), 100);
-        }
-    }
-
-    function stopAlarmService() {
-        if (isCapacitor) {
-            const CustomAlarm = window.Capacitor?.Plugins?.CustomAlarm;
-            if (CustomAlarm) {
-                CustomAlarm.stopService();
-            }
         }
     }
 
@@ -1795,7 +1934,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // --- Initialization ---
-    renderAlarms();
+    populateCustomSoundOptions().then(() => {
+        renderAlarms();
+    });
     renderWorldClocks();
     restoreTimerState();
     setInterval(updateClocks, 1000);

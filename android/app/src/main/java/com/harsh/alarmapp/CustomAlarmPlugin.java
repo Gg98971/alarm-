@@ -2,8 +2,6 @@ package com.harsh.alarmapp;
 
 import android.app.AlarmManager;
 import android.app.NotificationManager;
-import android.app.PendingIntent;
-import android.content.ActivityNotFoundException;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -11,16 +9,19 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.PowerManager;
 import android.provider.Settings;
+
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
+import org.json.JSONArray;
+
 @CapacitorPlugin(name = "CustomAlarm")
 public class CustomAlarmPlugin extends Plugin {
 
-    public static CustomAlarmPlugin instance; 
+    public static CustomAlarmPlugin instance;
 
     @Override
     public void load() {
@@ -30,8 +31,8 @@ public class CustomAlarmPlugin extends Plugin {
     @PluginMethod
     public void getActiveAlarm(PluginCall call) {
         JSObject ret = new JSObject();
-        ret.put("active", AlarmAudioService.isRunning);
-        ret.put("alarmId", AlarmAudioService.activeAlarmId);
+        ret.put("active", AlarmService.isRunning);
+        ret.put("alarmId", AlarmService.activeAlarmId);
         call.resolve(ret);
     }
 
@@ -41,8 +42,7 @@ public class CustomAlarmPlugin extends Plugin {
 
     @PluginMethod
     public void stopService(PluginCall call) {
-        Context context = getContext();
-        context.stopService(new Intent(context, AlarmAudioService.class));
+        getContext().stopService(new Intent(getContext(), AlarmService.class));
         call.resolve();
     }
 
@@ -70,7 +70,7 @@ public class CustomAlarmPlugin extends Plugin {
                 try {
                     Intent intent = new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM);
                     intent.setData(Uri.parse("package:" + context.getPackageName()));
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                     context.startActivity(intent);
                 } catch (Exception e) {
                     e.printStackTrace();
@@ -82,7 +82,6 @@ public class CustomAlarmPlugin extends Plugin {
 
     @PluginMethod
     public void schedule(PluginCall call) {
-
         Integer id = call.getInt("id");
         Long time = call.getLong("time");
 
@@ -92,62 +91,46 @@ public class CustomAlarmPlugin extends Plugin {
         }
 
         Context context = getContext();
-        AlarmManager alarmManager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
-        
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            if (alarmManager != null && !alarmManager.canScheduleExactAlarms()) {
-                call.reject("Exact alarm permission not granted. Please call requestExactAlarmPermission().");
-                return;
-            }
+
+        // Parse extended alarm data (label, days, sound) for native persistence
+        String label = call.getString("label", "Alarm");
+        boolean active = call.getBoolean("active", true);
+        String sound = call.getString("sound", "classic");
+
+        int[] days;
+        try {
+            JSONArray daysArr = new JSONArray(call.getArray("days"));
+            days = new int[daysArr.length()];
+            for (int i = 0; i < daysArr.length(); i++) days[i] = daysArr.optInt(i);
+        } catch (Exception e) {
+            days = new int[]{0, 1, 2, 3, 4, 5, 6};
         }
 
-        Intent intent = new Intent(context, CustomAlarmReceiver.class);
-        intent.putExtra("alarmId", id);
-        
-        PendingIntent pendingIntent = PendingIntent.getBroadcast(
-            context, 
-            id, 
-            intent, 
-            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
-        );
+        // Persist full alarm data natively
+        AlarmData alarmData = new AlarmData(id, call.getString("time", "00:00"), label,
+                active, days, sound, time);
+        AlarmData.save(context, alarmData);
 
-        Intent showIntent = new Intent(context, MainActivity.class);
-        PendingIntent showPendingIntent = PendingIntent.getActivity(
-            context,
-            id,
-            showIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
-        );
+        if (!AlarmScheduler.canScheduleExactAlarms(context)) {
+            // Permission missing — save as pending; the schedule will be
+            // processed once the user grants permission (see MainActivity.onResume).
+            call.resolve();
+            return;
+        }
 
-        AlarmManager.AlarmClockInfo alarmClockInfo = new AlarmManager.AlarmClockInfo(time, showPendingIntent);
-        alarmManager.setAlarmClock(alarmClockInfo, pendingIntent);
-
+        AlarmScheduler.scheduleAlarm(context, id, time);
         call.resolve();
     }
 
     @PluginMethod
     public void cancel(PluginCall call) {
         Integer id = call.getInt("id");
-
         if (id == null) {
             call.reject("Must provide an id");
             return;
         }
-
-        Context context = getContext();
-        AlarmManager alarmManager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
-        
-        Intent intent = new Intent(context, CustomAlarmReceiver.class);
-        PendingIntent pendingIntent = PendingIntent.getBroadcast(
-            context, 
-            id, 
-            intent, 
-            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
-        );
-
-        alarmManager.cancel(pendingIntent);
-        pendingIntent.cancel();
-
+        AlarmScheduler.cancelAlarm(getContext(), id);
+        AlarmData.remove(getContext(), id);
         call.resolve();
     }
 
@@ -157,9 +140,7 @@ public class CustomAlarmPlugin extends Plugin {
         boolean granted = true;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
             NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
-            if (nm != null) {
-                granted = nm.canUseFullScreenIntent();
-            }
+            if (nm != null) granted = nm.canUseFullScreenIntent();
         }
         JSObject ret = new JSObject();
         ret.put("granted", granted);
@@ -175,11 +156,9 @@ public class CustomAlarmPlugin extends Plugin {
                 try {
                     Intent intent = new Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT);
                     intent.setData(Uri.parse("package:" + context.getPackageName()));
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                     context.startActivity(intent);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
+                } catch (Exception e) { e.printStackTrace(); }
             }
         }
         call.resolve();
@@ -189,10 +168,7 @@ public class CustomAlarmPlugin extends Plugin {
     public void checkIgnoreBatteryOptimizations(PluginCall call) {
         Context context = getContext();
         PowerManager pm = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
-        boolean ignoring = true;
-        if (pm != null) {
-            ignoring = pm.isIgnoringBatteryOptimizations(context.getPackageName());
-        }
+        boolean ignoring = pm != null && pm.isIgnoringBatteryOptimizations(context.getPackageName());
         JSObject ret = new JSObject();
         ret.put("ignoring", ignoring);
         call.resolve(ret);
@@ -206,11 +182,9 @@ public class CustomAlarmPlugin extends Plugin {
             try {
                 Intent intent = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
                 intent.setData(Uri.parse("package:" + context.getPackageName()));
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 context.startActivity(intent);
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
+            } catch (Exception e) { e.printStackTrace(); }
         }
         call.resolve();
     }
@@ -220,7 +194,7 @@ public class CustomAlarmPlugin extends Plugin {
         Context context = getContext();
         try {
             Intent intent = new Intent();
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             String manufacturer = Build.MANUFACTURER.toLowerCase();
             if (manufacturer.contains("xiaomi") || manufacturer.contains("redmi") || manufacturer.contains("poco")) {
                 intent.setComponent(new ComponentName("com.miui.securitycenter", "com.miui.permcenter.autostart.AutoStartManagementActivity"));
@@ -235,7 +209,7 @@ public class CustomAlarmPlugin extends Plugin {
             } else {
                 Intent appSettingsIntent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
                 appSettingsIntent.setData(Uri.parse("package:" + context.getPackageName()));
-                appSettingsIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                appSettingsIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 context.startActivity(appSettingsIntent);
                 call.resolve();
                 return;
@@ -245,11 +219,9 @@ public class CustomAlarmPlugin extends Plugin {
             try {
                 Intent fallback = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
                 fallback.setData(Uri.parse("package:" + context.getPackageName()));
-                fallback.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                fallback.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                 context.startActivity(fallback);
-            } catch (Exception ex) {
-                ex.printStackTrace();
-            }
+            } catch (Exception ex) { ex.printStackTrace(); }
         }
         call.resolve();
     }
