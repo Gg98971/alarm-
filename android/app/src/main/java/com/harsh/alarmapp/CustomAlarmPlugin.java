@@ -2,6 +2,7 @@ package com.harsh.alarmapp;
 
 import android.app.AlarmManager;
 import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -132,6 +133,29 @@ public class CustomAlarmPlugin extends Plugin {
         AlarmScheduler.cancelAlarm(getContext(), id);
         AlarmData.remove(getContext(), id);
         call.resolve();
+    }
+
+    @PluginMethod
+    public void getNextNativeAlarm(PluginCall call) {
+        Context context = getContext();
+        AlarmManager alarmManager = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+        JSObject ret = new JSObject();
+        ret.put("exists", false);
+        ret.put("triggerTime", 0L);
+        ret.put("showIntentPackage", "");
+
+        if (alarmManager != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            AlarmManager.AlarmClockInfo info = alarmManager.getNextAlarmClock();
+            if (info != null) {
+                ret.put("exists", true);
+                ret.put("triggerTime", info.getTriggerTime());
+                PendingIntent showIntent = info.getShowIntent();
+                if (showIntent != null) {
+                    ret.put("showIntentPackage", showIntent.getCreatorPackage());
+                }
+            }
+        }
+        call.resolve(ret);
     }
 
     @PluginMethod

@@ -954,6 +954,316 @@ input:checked + .slider:before {
     border-color: #ff4d4d !important;
 }
 
+/* --- Reliability / Diagnostics Panel --- */
+.reliability-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--card-bg);
+    border-radius: 12px;
+    padding: 10px 16px;
+    margin-bottom: 16px;
+    border: 1px solid rgba(255,255,255,0.08);
+    transition: border-color 0.3s ease;
+}
+
+.reliability-bar.good {
+    border-color: rgba(66, 227, 180, 0.4);
+}
+
+.reliability-bar.warning {
+    border-color: rgba(255, 200, 50, 0.4);
+}
+
+.reliability-bar.error {
+    border-color: rgba(255, 77, 77, 0.4);
+}
+
+.reliability-bar-left {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.reliability-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    transition: background 0.3s ease, box-shadow 0.3s ease;
+}
+
+.reliability-dot.good {
+    background: var(--accent-cyan);
+    box-shadow: 0 0 8px var(--accent-cyan-glow);
+}
+
+.reliability-dot.warning {
+    background: #ffc832;
+    box-shadow: 0 0 8px rgba(255, 200, 50, 0.5);
+}
+
+.reliability-dot.error {
+    background: #ff4d4d;
+    box-shadow: 0 0 8px rgba(255, 77, 77, 0.5);
+}
+
+.reliability-dot.loading {
+    background: var(--text-muted);
+    animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 1; }
+}
+
+.reliability-bar-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+}
+
+.reliability-bar-btn:hover {
+    background: rgba(255,255,255,0.08);
+    color: var(--text-main);
+}
+
+.reliability-bar-btn i {
+    width: 18px;
+    height: 18px;
+}
+
+/* Reliability Modal */
+.reliability-modal-content {
+    max-height: calc(100dvh - 32px);
+    overflow-y: auto;
+}
+
+.reliability-modal-content h3 {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.reliability-modal-content h3 i {
+    width: 24px;
+    height: 24px;
+    color: var(--accent-cyan);
+}
+
+.reliability-status-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.reliability-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: rgba(255,255,255,0.03);
+    border-radius: 10px;
+    border: 1px solid rgba(255,255,255,0.06);
+}
+
+.reliability-label {
+    font-size: 0.9rem;
+    color: var(--text-muted);
+}
+
+.reliability-value {
+    font-size: 0.85rem;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 6px;
+    white-space: nowrap;
+}
+
+.reliability-value.granted,
+.reliability-value.yes,
+.reliability-value.registered {
+    background: rgba(66, 227, 180, 0.15);
+    color: var(--accent-cyan);
+}
+
+.reliability-value.missing,
+.reliability-value.no,
+.reliability-value.not-registered {
+    background: rgba(255, 77, 77, 0.15);
+    color: #ff4d4d;
+}
+
+.reliability-value.unknown {
+    background: rgba(255, 200, 50, 0.15);
+    color: #ffc832;
+}
+
+.reliability-value.time {
+    background: rgba(255,255,255,0.06);
+    color: var(--text-main);
+    font-variant-numeric: tabular-nums;
+}
+
+.reliability-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.reliability-actions .secondary-btn {
+    flex: 1;
+    min-width: 120px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    font-size: 0.8rem;
+    padding: 10px 12px;
+}
+
+.reliability-actions .secondary-btn i {
+    width: 16px;
+    height: 16px;
+}
+
+/* 2-Minute Test Section */
+.reliability-test-section {
+    background: rgba(255,255,255,0.03);
+    border-radius: 12px;
+    padding: 20px;
+    border: 1px solid rgba(255,255,255,0.06);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.reliability-test-section h4 {
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.reliability-test-desc {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+}
+
+.test-alarm-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    font-size: 0.95rem;
+}
+
+.test-alarm-btn i {
+    width: 20px;
+    height: 20px;
+}
+
+.test-alarm-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.reliability-test-result {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    background: rgba(66, 227, 180, 0.08);
+    border-radius: 8px;
+    border: 1px solid rgba(66, 227, 180, 0.2);
+}
+
+.reliability-test-result.success {
+    border-color: var(--accent-cyan);
+}
+
+.reliability-test-result.error {
+    border-color: #ff4d4d;
+    background: rgba(255, 77, 77, 0.08);
+}
+
+.reliability-test-detail {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.reliability-test-warning {
+    color: #ffc832;
+    font-weight: 500;
+}
+
+/* Device Warning */
+.device-warning {
+    background: rgba(255, 200, 50, 0.08);
+    border-radius: 12px;
+    padding: 20px;
+    border: 1px solid rgba(255, 200, 50, 0.2);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.device-warning h4 {
+    font-size: 1rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #ffc832;
+}
+
+.device-warning h4 i {
+    width: 20px;
+    height: 20px;
+}
+
+.device-warning p {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    line-height: 1.4;
+}
+
+.device-warning-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-left: 0;
+}
+
+.device-warning-list li {
+    font-size: 0.85rem;
+    line-height: 1.4;
+    padding-left: 20px;
+    position: relative;
+    color: var(--text-main);
+}
+
+.device-warning-list li::before {
+    content: "\26A0";
+    position: absolute;
+    left: 0;
+    color: #ffc832;
+    font-size: 0.8rem;
+}
+
+.device-warning-list li strong {
+    color: var(--accent-cyan);
+}
+
 @keyframes shake {
     10%, 90% { transform: translate3d(-2px, 0, 0); }
     20%, 80% { transform: translate3d(4px, 0, 0); }

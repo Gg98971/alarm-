@@ -1933,11 +1933,376 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // --- Reliability / Diagnostics System ---
+    // The user requested diagnostic hardening to verify alarms survive app swipe-away.
+    let lastReliabilityStatus = null;
+    let testAlarmScheduled = false;
+
+    async function checkNativeAlarmStatus() {
+        if (!isCapacitor) return null;
+        const CustomAlarm = window.Capacitor?.Plugins?.CustomAlarm;
+        if (!CustomAlarm) return null;
+        try {
+            const status = await CustomAlarm.getNextNativeAlarm();
+            console.log('[Reliability] getNextNativeAlarm:', JSON.stringify(status));
+            return status;
+        } catch (e) {
+            console.warn('[Reliability] Failed to check native alarm:', e);
+            return null;
+        }
+    }
+
+    async function getAllReliabilityStatus() {
+        if (!isCapacitor) return null;
+        const CustomAlarm = window.Capacitor?.Plugins?.CustomAlarm;
+        if (!CustomAlarm) return null;
+
+        try {
+            const [exactPerm, fullScreenPerm, batteryOpt, nativeAlarm] = await Promise.all([
+                CustomAlarm.checkPermissions(),
+                CustomAlarm.checkFullScreenPermission(),
+                CustomAlarm.checkIgnoreBatteryOptimizations(),
+                CustomAlarm.getNextNativeAlarm()
+            ]);
+
+            let notifGranted = false;
+            try {
+                if (LocalNotifications) {
+                    const np = await LocalNotifications.checkPermissions();
+                    notifGranted = np.display === 'granted';
+                }
+            } catch (e) {
+                // Fallback to web Notification API
+            }
+            if (!notifGranted && 'Notification' in window) {
+                notifGranted = Notification.permission === 'granted';
+            }
+
+            const status = {
+                exactAlarmGranted: exactPerm?.exactAlarmGranted === true,
+                fullScreenGranted: fullScreenPerm?.granted === true,
+                batteryIgnoring: batteryOpt?.ignoring === true,
+                nativeAlarmExists: nativeAlarm?.exists === true,
+                nativeAlarmTriggerTime: nativeAlarm?.triggerTime || 0,
+                notificationGranted: notifGranted
+            };
+
+            lastReliabilityStatus = status;
+            console.log('[Reliability] Full status:', JSON.stringify(status));
+            return status;
+        } catch (e) {
+            console.warn('[Reliability] Failed to get full status:', e);
+            return null;
+        }
+    }
+
+    function updateReliabilityBar(status) {
+        const bar = document.getElementById('reliability-status-bar');
+        const dot = document.getElementById('reliability-dot');
+        const text = document.getElementById('reliability-bar-text');
+        if (!bar || !dot || !text) return;
+
+        if (!isCapacitor || !status) {
+            bar.style.display = 'none';
+            return;
+        }
+
+        bar.style.display = 'flex';
+
+        if (status.nativeAlarmExists) {
+            dot.className = 'reliability-dot good';
+            text.textContent = 'Native alarm registered';
+            bar.className = 'reliability-bar good';
+        } else if (!status.exactAlarmGranted) {
+            dot.className = 'reliability-dot error';
+            text.textContent = 'Exact alarm permission missing';
+            bar.className = 'reliability-bar error';
+        } else if (!status.batteryIgnoring) {
+            dot.className = 'reliability-dot warning';
+            text.textContent = 'Battery optimization may block alarms';
+            bar.className = 'reliability-bar warning';
+        } else if (!status.fullScreenGranted) {
+            dot.className = 'reliability-dot warning';
+            text.textContent = 'Full-screen intent permission missing';
+            bar.className = 'reliability-bar warning';
+        } else if (!status.notificationGranted) {
+            dot.className = 'reliability-dot warning';
+            text.textContent = 'Notification permission missing';
+            bar.className = 'reliability-bar warning';
+        } else {
+            dot.className = 'reliability-dot good';
+            text.textContent = 'All permissions OK';
+            bar.className = 'reliability-bar good';
+        }
+    }
+
+    function updateReliabilityModal(status) {
+        if (!status) return;
+
+        function setValue(id, value, cssClass) {
+            const el = document.getElementById(id);
+            if (el) {
+                el.textContent = value;
+                el.className = 'reliability-value ' + cssClass;
+            }
+        }
+
+        setValue('rel-exact-alarm', status.exactAlarmGranted ? 'Granted' : 'Missing', status.exactAlarmGranted ? 'granted' : 'missing');
+        setValue('rel-notification', status.notificationGranted ? 'Granted' : 'Missing', status.notificationGranted ? 'granted' : 'missing');
+        setValue('rel-fullscreen', status.fullScreenGranted ? 'Granted' : 'Missing', status.fullScreenGranted ? 'granted' : 'missing');
+        setValue('rel-battery', status.batteryIgnoring ? 'Ignored' : 'Optimizing', status.batteryIgnoring ? 'yes' : 'no');
+        setValue('rel-native-alarm', status.nativeAlarmExists ? 'Registered' : 'Not found', status.nativeAlarmExists ? 'registered' : 'not-registered');
+
+        const triggerEl = document.getElementById('rel-native-trigger');
+        if (triggerEl) {
+            if (status.nativeAlarmExists && status.nativeAlarmTriggerTime > 0) {
+                const d = new Date(status.nativeAlarmTriggerTime);
+                triggerEl.textContent = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + 
+                    ' (' + d.toLocaleDateString() + ')';
+                triggerEl.className = 'reliability-value time';
+            } else {
+                triggerEl.textContent = 'No alarm scheduled';
+                triggerEl.className = 'reliability-value unknown';
+            }
+        }
+
+        // Show/hide fix buttons
+        document.getElementById('rel-fix-exact-alarm').style.display = status.exactAlarmGranted ? 'none' : 'block';
+        document.getElementById('rel-fix-fullscreen').style.display = status.fullScreenGranted ? 'none' : 'block';
+        document.getElementById('rel-fix-battery').style.display = status.batteryIgnoring ? 'none' : 'block';
+
+        // Show device warning if native alarm is not registered or any critical permission is missing
+        const warningSection = document.getElementById('device-warning-section');
+        if (warningSection) {
+            const showWarning = !status.nativeAlarmExists || !status.exactAlarmGranted || !status.batteryIgnoring;
+            warningSection.style.display = showWarning ? 'block' : 'none';
+        }
+    }
+
+    async function refreshReliabilityStatus() {
+        const dot = document.getElementById('reliability-dot');
+        if (dot) dot.className = 'reliability-dot loading';
+        
+        const status = await getAllReliabilityStatus();
+        if (status) {
+            updateReliabilityBar(status);
+            updateReliabilityModal(status);
+        }
+    }
+
+    async function logNativeAlarmAfterSchedule(context) {
+        console.log(`[Reliability] Checking native alarm after ${context}...`);
+        const status = await checkNativeAlarmStatus();
+        if (status) {
+            console.log(`[Reliability] Native alarm registered: ${status.exists}, triggerTime: ${status.triggerTime ? new Date(status.triggerTime).toISOString() : 'N/A'}`);
+            lastReliabilityStatus = {
+                ...(lastReliabilityStatus || {}),
+                nativeAlarmExists: status.exists,
+                nativeAlarmTriggerTime: status.triggerTime || 0
+            };
+            updateReliabilityBar(lastReliabilityStatus);
+        }
+    }
+
+    // Modify scheduleNativeAlarm to log native status after scheduling
+    const _origScheduleNativeAlarm = scheduleNativeAlarm;
+    scheduleNativeAlarm = async function(alarm) {
+        await _origScheduleNativeAlarm(alarm);
+        if (alarm.active) {
+            await logNativeAlarmAfterSchedule('schedule alarm ' + alarm.id);
+        }
+    };
+
+    // Modify scheduleNativeTimer to log native status after scheduling
+    const _origScheduleNativeTimer = scheduleNativeTimer;
+    scheduleNativeTimer = async function(endTimeMs) {
+        await _origScheduleNativeTimer(endTimeMs);
+        await logNativeAlarmAfterSchedule('schedule timer');
+    };
+
+    // --- Reliability Modal Event Listeners ---
+    document.getElementById('open-reliability-btn')?.addEventListener('click', async () => {
+        const modal = document.getElementById('reliability-modal');
+        if (!modal) return;
+        modal.classList.add('active');
+        await refreshReliabilityStatus();
+    });
+
+    document.getElementById('close-reliability-btn')?.addEventListener('click', () => {
+        document.getElementById('reliability-modal')?.classList.remove('active');
+    });
+
+    document.getElementById('rel-refresh-btn')?.addEventListener('click', refreshReliabilityStatus);
+
+    document.getElementById('rel-fix-exact-alarm')?.addEventListener('click', async () => {
+        const CustomAlarm = window.Capacitor?.Plugins?.CustomAlarm;
+        if (CustomAlarm) {
+            await CustomAlarm.requestExactAlarmPermission();
+            setTimeout(refreshReliabilityStatus, 1500);
+        }
+    });
+
+    document.getElementById('rel-fix-fullscreen')?.addEventListener('click', async () => {
+        const CustomAlarm = window.Capacitor?.Plugins?.CustomAlarm;
+        if (CustomAlarm) {
+            await CustomAlarm.requestFullScreenIntentPermission();
+            setTimeout(refreshReliabilityStatus, 1500);
+        }
+    });
+
+    document.getElementById('rel-fix-battery')?.addEventListener('click', async () => {
+        const CustomAlarm = window.Capacitor?.Plugins?.CustomAlarm;
+        if (CustomAlarm) {
+            await CustomAlarm.requestIgnoreBatteryOptimizations();
+            setTimeout(refreshReliabilityStatus, 1500);
+        }
+    });
+
+    document.getElementById('rel-open-autostart')?.addEventListener('click', async () => {
+        const CustomAlarm = window.Capacitor?.Plugins?.CustomAlarm;
+        if (CustomAlarm) {
+            await CustomAlarm.openAutoStartSettings();
+        }
+    });
+
+    document.getElementById('rel-dismiss-warning')?.addEventListener('click', () => {
+        const section = document.getElementById('device-warning-section');
+        if (section) section.style.display = 'none';
+    });
+
+    // --- 2-Minute Native Alarm Test ---
+    document.getElementById('rel-test-alarm-btn')?.addEventListener('click', async () => {
+        const btn = document.getElementById('rel-test-alarm-btn');
+        const resultDiv = document.getElementById('rel-test-result');
+        const statusText = document.getElementById('rel-test-status-text');
+        const triggerTimeEl = document.getElementById('rel-test-trigger-time');
+        if (!btn || !resultDiv || !statusText || !triggerTimeEl) return;
+
+        if (testAlarmScheduled) {
+            // Cancel the test
+            const CustomAlarm = window.Capacitor?.Plugins?.CustomAlarm;
+            if (CustomAlarm) {
+                await CustomAlarm.cancel({ id: 2147483646 });
+            }
+            testAlarmScheduled = false;
+            btn.disabled = false;
+            btn.innerHTML = '<i data-lucide="alarm-clock"></i> Start Test';
+            resultDiv.style.display = 'none';
+            lucide.createIcons();
+            return;
+        }
+
+        if (!isCapacitor) {
+            statusText.textContent = 'Not running on native device. Cannot test.';
+            resultDiv.className = 'reliability-test-result error';
+            resultDiv.style.display = 'block';
+            return;
+        }
+
+        const CustomAlarm = window.Capacitor?.Plugins?.CustomAlarm;
+        if (!CustomAlarm) {
+            statusText.textContent = 'CustomAlarm plugin not available.';
+            resultDiv.className = 'reliability-test-result error';
+            resultDiv.style.display = 'block';
+            return;
+        }
+
+        btn.disabled = true;
+        btn.innerHTML = '<i data-lucide="loader"></i> Scheduling...';
+        lucide.createIcons();
+
+        try {
+            // Check exact alarm permission first
+            const permCheck = await CustomAlarm.checkPermissions();
+            if (permCheck && permCheck.exactAlarmGranted === false) {
+                statusText.textContent = 'Exact alarm permission not granted. Please fix permissions first.';
+                resultDiv.className = 'reliability-test-result error';
+                resultDiv.style.display = 'block';
+                btn.disabled = false;
+                btn.innerHTML = '<i data-lucide="alarm-clock"></i> Start Test';
+                lucide.createIcons();
+                return;
+            }
+
+            const testAlarmId = 2147483646; // Special test alarm ID
+            const testTime = Date.now() + 2 * 60 * 1000; // 2 minutes from now
+
+            await CustomAlarm.schedule({
+                id: testAlarmId,
+                time: testTime,
+                label: 'Test Alarm (2 min)',
+                active: true,
+                days: [0, 1, 2, 3, 4, 5, 6],
+                sound: 'classic'
+            });
+
+            testAlarmScheduled = true;
+
+            // Verify the alarm was registered natively
+            await new Promise(resolve => setTimeout(resolve, 500)); // Brief delay for AlarmManager
+            const nativeStatus = await CustomAlarm.getNextNativeAlarm();
+
+            if (nativeStatus && nativeStatus.exists) {
+                const registeredTime = new Date(nativeStatus.triggerTime);
+                statusText.textContent = 'Test alarm scheduled successfully!';
+                statusText.style.color = 'var(--accent-cyan)';
+                triggerTimeEl.textContent = 'Native trigger time: ' + registeredTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                resultDiv.className = 'reliability-test-result success';
+                btn.innerHTML = '<i data-lucide="x-circle"></i> Cancel Test';
+                btn.disabled = false;
+            } else {
+                statusText.textContent = 'Alarm was scheduled but Android did not register it with AlarmManager!';
+                statusText.style.color = '#ff4d4d';
+                triggerTimeEl.textContent = 'getNextAlarmClock() returned no alarm — exact alarm permission may be missing or blocked.';
+                resultDiv.className = 'reliability-test-result error';
+                btn.innerHTML = '<i data-lucide="alarm-clock"></i> Start Test';
+                btn.disabled = false;
+                testAlarmScheduled = false;
+            }
+
+            resultDiv.style.display = 'block';
+            document.getElementById('rel-test-instructions').style.display = 'block';
+            lucide.createIcons();
+
+            // Initial reliability check
+            refreshReliabilityStatus();
+        } catch (e) {
+            console.error('[Reliability] Test alarm failed:', e);
+            statusText.textContent = 'Failed to schedule test alarm: ' + (e.message || e);
+            statusText.style.color = '#ff4d4d';
+            triggerTimeEl.textContent = '';
+            resultDiv.className = 'reliability-test-result error';
+            resultDiv.style.display = 'block';
+            btn.disabled = false;
+            btn.innerHTML = '<i data-lucide="alarm-clock"></i> Start Test';
+            lucide.createIcons();
+        }
+    });
+
     // --- Initialization ---
     populateCustomSoundOptions().then(() => {
         renderAlarms();
+        // Initial reliability check after short delay for Capacitor to initialize
+        setTimeout(async () => {
+            const status = await getAllReliabilityStatus();
+            if (status) {
+                updateReliabilityBar(status);
+            }
+        }, 2000);
     });
     renderWorldClocks();
     restoreTimerState();
     setInterval(updateClocks, 1000);
+    
+    // Periodic reliability check (every 30 seconds)
+    setInterval(async () => {
+        if (isCapacitor && lastReliabilityStatus) {
+            const status = await checkNativeAlarmStatus();
+            if (status) {
+                lastReliabilityStatus.nativeAlarmExists = status.exists;
+                lastReliabilityStatus.nativeAlarmTriggerTime = status.triggerTime || 0;
+                updateReliabilityBar(lastReliabilityStatus);
+            }
+        }
+    }, 30000);
 });

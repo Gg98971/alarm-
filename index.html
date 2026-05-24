@@ -119,6 +119,17 @@
                     </button>
                 </div>
 
+                <!-- Reliability Status Bar -->
+                <div id="reliability-status-bar" class="reliability-bar" style="display:none;">
+                    <div class="reliability-bar-left">
+                        <span class="reliability-dot" id="reliability-dot"></span>
+                        <span id="reliability-bar-text">Checking native alarm...</span>
+                    </div>
+                    <button class="reliability-bar-btn" id="open-reliability-btn" aria-label="Open reliability details">
+                        <i data-lucide="info"></i>
+                    </button>
+                </div>
+
                 <div class="card-list">
                     <!-- Dynamic Alarms go here -->
                 </div>
@@ -339,6 +350,101 @@
                 <input type="number" id="math-answer" placeholder="Answer" autocomplete="off">
             </div>
             <button id="stop-alarm" class="primary-btn">Stop</button>
+        </div>
+    </div>
+
+    <!-- Reliability / Diagnostics Modal -->
+    <div id="reliability-modal" class="modal">
+        <div class="modal-content reliability-modal-content">
+            <h3>
+                <i data-lucide="activity"></i>
+                Alarm Reliability
+            </h3>
+
+            <div id="reliability-status-list" class="reliability-status-list">
+                <div class="reliability-item" data-check="exactAlarm">
+                    <span class="reliability-label">Exact Alarm Permission</span>
+                    <span class="reliability-value" id="rel-exact-alarm">Checking...</span>
+                </div>
+                <div class="reliability-item" data-check="notification">
+                    <span class="reliability-label">Notification Permission</span>
+                    <span class="reliability-value" id="rel-notification">Checking...</span>
+                </div>
+                <div class="reliability-item" data-check="fullScreen">
+                    <span class="reliability-label">Full-Screen Intent Permission</span>
+                    <span class="reliability-value" id="rel-fullscreen">Checking...</span>
+                </div>
+                <div class="reliability-item" data-check="battery">
+                    <span class="reliability-label">Battery Optimization Ignored</span>
+                    <span class="reliability-value" id="rel-battery">Checking...</span>
+                </div>
+                <div class="reliability-item" data-check="nativeAlarm">
+                    <span class="reliability-label">Native Alarm Registered</span>
+                    <span class="reliability-value" id="rel-native-alarm">Checking...</span>
+                </div>
+                <div class="reliability-item" data-check="nativeTrigger">
+                    <span class="reliability-label">Next Native Trigger Time</span>
+                    <span class="reliability-value" id="rel-native-trigger">--</span>
+                </div>
+            </div>
+
+            <div class="reliability-actions">
+                <button id="rel-refresh-btn" class="secondary-btn">
+                    <i data-lucide="refresh-cw"></i> Refresh
+                </button>
+                <button id="rel-fix-exact-alarm" class="secondary-btn" style="display:none;">
+                    Fix Exact Alarm
+                </button>
+                <button id="rel-fix-fullscreen" class="secondary-btn" style="display:none;">
+                    Fix Full-Screen
+                </button>
+                <button id="rel-fix-battery" class="secondary-btn" style="display:none;">
+                    Disable Battery Opt.
+                </button>
+                <button id="rel-open-autostart" class="secondary-btn">
+                    Open Auto-Start Settings
+                </button>
+            </div>
+
+            <!-- 2-Minute Native Alarm Test -->
+            <div class="reliability-test-section">
+                <h4>2-Minute Native Alarm Test</h4>
+                <p class="reliability-test-desc">Schedule a test alarm 2 minutes from now to verify the native path survives app swipe-away.</p>
+                <button id="rel-test-alarm-btn" class="primary-btn test-alarm-btn">
+                    <i data-lucide="alarm-clock"></i> Start Test
+                </button>
+                <div id="rel-test-result" class="reliability-test-result" style="display:none;">
+                    <p id="rel-test-status-text"></p>
+                    <p id="rel-test-trigger-time" class="reliability-test-detail"></p>
+                    <p id="rel-test-instructions" class="reliability-test-detail reliability-test-warning">
+                        Lock your phone and swipe the app away from Recents. The alarm should still ring in ~2 minutes.
+                    </p>
+                </div>
+            </div>
+
+            <!-- Device Warning -->
+            <div id="device-warning-section" class="device-warning" style="display:none;">
+                <h4>
+                    <i data-lucide="alert-triangle"></i>
+                    Device-Specific Settings Required
+                </h4>
+                <p>
+                    Your phone may force-stop apps when swiped away from Recents.
+                    To ensure alarms survive, enable the following in your system settings:
+                </p>
+                <ul class="device-warning-list">
+                    <li><strong>Unrestricted battery</strong> (Settings &gt; Apps &gt; Circadian Ease &gt; Battery)</li>
+                    <li><strong>Auto-start / Background launch</strong> (varies by OEM)</li>
+                    <li><strong>Notifications</strong> (allow all)</li>
+                    <li><strong>Alarms &amp; reminders / Exact alarms</strong> permission</li>
+                    <li><strong>Full-screen alerts</strong> (Android 14+)</li>
+                </ul>
+                <button id="rel-dismiss-warning" class="secondary-btn">Dismiss</button>
+            </div>
+
+            <div class="modal-actions">
+                <button id="close-reliability-btn" class="secondary-btn">Close</button>
+            </div>
         </div>
     </div>
 
