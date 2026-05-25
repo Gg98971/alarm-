@@ -70,16 +70,59 @@ public final class AlarmScheduler {
         removePersistedAlarm(context, alarmId);
     }
 
-    public static void rescheduleAllOnBoot(Context context) {
-        Set<Integer> ids = getPersistedAlarmIds(context);
-        for (int id : ids) {
-            long triggerAtMs = getPersistedTriggerTime(context, id);
-            if (triggerAtMs > System.currentTimeMillis()) {
-                scheduleAlarm(context, id, triggerAtMs);
+    /**
+     * Shared helper: recalculate the next valid trigger time for every
+     * active repeating alarm, persist it, and schedule it if it is
+     * still in the future.  Used by boot restore, pending-schedule
+     * processing, and permission-return handling.
+     */
+    public static void rescheduleActiveRepeatingAlarms(Context context) {
+        java.util.List<AlarmData> allAlarms = AlarmData.loadAll(context);
+        int scheduledCount = 0;
+        int skippedCount = 0;
+        for (AlarmData alarm : allAlarms) {
+            if (!alarm.active) {
+                android.util.Log.d("AlarmScheduler", "rescheduleActiveRepeatingAlarms: skipping inactive alarm " + alarm.id);
+                skippedCount++;
+                continue;
+            }
+
+            long nextMs = AlarmData.computeNextTriggerMs(alarm);
+
+            if (nextMs == Long.MAX_VALUE) {
+                android.util.Log.w("AlarmScheduler", "rescheduleActiveRepeatingAlarms: skipping alarm " + alarm.id
+                        + " -- computeNextTriggerMs returned MAX_VALUE (invalid time or no active days)");
+                skippedCount++;
+                continue;
+            }
+
+            // Persist the recalculated next trigger time
+            AlarmData updated = new AlarmData(
+                alarm.id, alarm.time, alarm.label, alarm.active,
+                alarm.days, alarm.sound, nextMs
+            );
+            AlarmData.save(context, updated);
+
+            if (nextMs > System.currentTimeMillis()) {
+                scheduleAlarm(context, alarm.id, nextMs);
+                scheduledCount++;
             } else {
-                removePersistedAlarm(context, id);
+                android.util.Log.d("AlarmScheduler", "rescheduleActiveRepeatingAlarms: alarm " + alarm.id
+                        + " next trigger " + nextMs + " is in the past, not scheduling");
+                skippedCount++;
             }
         }
+        android.util.Log.d("AlarmScheduler", "rescheduleActiveRepeatingAlarms: scheduled=" + scheduledCount
+                + " skipped=" + skippedCount + " total=" + allAlarms.size());
+    }
+
+    /**
+     * Boot-time restore -- delegates to the shared helper so there is
+     * only one code path for recalculating and rescheduling repeating alarms.
+     */
+    public static void rescheduleAllOnBoot(Context context) {
+        android.util.Log.i("AlarmScheduler", "rescheduleAllOnBoot: delegating to rescheduleActiveRepeatingAlarms");
+        rescheduleActiveRepeatingAlarms(context);
     }
 
     private static SharedPreferences prefs(Context context) {
@@ -106,22 +149,6 @@ public final class AlarmScheduler {
                 .putStringSet(KEY_ALARM_LIST, mutable)
                 .remove(KEY_ALARM_PREFIX_ID + alarmId)
                 .apply();
-    }
-
-    private static Set<Integer> getPersistedAlarmIds(Context context) {
-        SharedPreferences sp = prefs(context);
-        Set<String> ids = sp.getStringSet(KEY_ALARM_LIST, new HashSet<>());
-        Set<Integer> result = new HashSet<>(ids.size());
-        for (String s : ids) {
-            try {
-                result.add(Integer.parseInt(s));
-            } catch (NumberFormatException ignored) { }
-        }
-        return result;
-    }
-
-    private static long getPersistedTriggerTime(Context context, int alarmId) {
-        return prefs(context).getLong(KEY_ALARM_PREFIX_ID + alarmId, 0L);
     }
 
     public static boolean canScheduleExactAlarms(Context context) {

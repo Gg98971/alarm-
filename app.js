@@ -174,11 +174,13 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             await CustomAlarm.schedule({
                 id: alarm.id,
-                time: alarmDate.getTime(),
+                triggerAtMs: alarmDate.getTime(),
+                time: alarm.time,
                 label: alarm.label,
                 active: alarm.active,
                 days: alarm.days,
-                sound: alarm.sound
+                sound: alarm.sound,
+                type: 'alarm'
             });
             console.log(`Scheduled native alarm ${alarm.id} for ${alarmDate}`);
         } catch (err) {
@@ -187,11 +189,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 await CustomAlarm.requestExactAlarmPermission();
                 await CustomAlarm.schedule({
                     id: alarm.id,
-                    time: alarmDate.getTime(),
+                    triggerAtMs: alarmDate.getTime(),
+                    time: alarm.time,
                     label: alarm.label,
                     active: alarm.active,
                     days: alarm.days,
-                    sound: alarm.sound
+                    sound: alarm.sound,
+                    type: 'alarm'
                 });
                 console.log(`Scheduled native alarm ${alarm.id} after requesting permission`);
             } catch (retryErr) {
@@ -224,37 +228,47 @@ document.addEventListener('DOMContentLoaded', () => {
     const TIMER_NOTIFICATION_ID = 999999;
 
     async function scheduleNativeTimer(endTimeMs) {
-        if (!isCapacitor) return;
+        if (!isCapacitor) return false;
         
         const CustomAlarm = window.Capacitor?.Plugins?.CustomAlarm;
-        if (!CustomAlarm) return;
+        if (!CustomAlarm) return false;
+
+        // Check exact-alarm permission first.
+        let exactAlarmGranted = false;
+        try {
+            const perm = await CustomAlarm.checkPermissions();
+            exactAlarmGranted = perm && perm.exactAlarmGranted === true;
+        } catch (e) {
+            console.warn('scheduleNativeTimer: failed to check permissions', e);
+        }
+
+        if (!exactAlarmGranted) {
+            console.warn('scheduleNativeTimer: exact alarm permission not granted for timer — requesting permission');
+            // Try requesting the permission (this opens system settings, user must grant)
+            try {
+                await CustomAlarm.requestExactAlarmPermission();
+            } catch (e) {
+                console.error('scheduleNativeTimer: failed to request exact alarm permission', e);
+            }
+            return false;
+        }
 
         try {
             await CustomAlarm.schedule({
                 id: TIMER_NOTIFICATION_ID,
-                time: endTimeMs,
+                triggerAtMs: endTimeMs,
+                time: '00:00',
                 label: 'Timer',
                 active: true,
                 days: [0,1,2,3,4,5,6],
-                sound: 'classic'
+                sound: 'classic',
+                type: 'timer'
             });
             console.log(`Scheduled native timer for ${new Date(endTimeMs)}`);
+            return true;
         } catch (err) {
-            console.warn('Failed to schedule native timer, trying to request exact alarm permission:', err);
-            try {
-                await CustomAlarm.requestExactAlarmPermission();
-                await CustomAlarm.schedule({
-                    id: TIMER_NOTIFICATION_ID,
-                    time: endTimeMs,
-                    label: 'Timer',
-                    active: true,
-                    days: [0,1,2,3,4,5,6],
-                    sound: 'classic'
-                });
-                console.log(`Scheduled native timer after requesting permission`);
-            } catch (retryErr) {
-                console.error('Retry scheduling native timer failed:', retryErr);
-            }
+            console.error('scheduleNativeTimer: native schedule rejected:', err);
+            return false;
         }
     }
 
@@ -1871,7 +1885,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    tmStartPauseBtn.addEventListener('click', () => {
+    tmStartPauseBtn.addEventListener('click', async () => {
         if (tmRunning) {
             // Pause
             tmRunning = false;
@@ -1881,20 +1895,41 @@ document.addEventListener('DOMContentLoaded', () => {
             saveTimerState();
         } else {
             // Start or Resume
-            if (tmRemaining === 0) {
-                // Starting fresh
+            const isFreshStart = tmRemaining === 0;
+            if (isFreshStart) {
                 tmRemaining = getSelectedTMDuration();
                 if (tmRemaining === 0) return; // Nothing to count down
-                
+            }
+            tmEndTime = Date.now() + tmRemaining;
+
+            // On Capacitor, await native scheduling before any UI changes.
+            // This prevents false "timer running" UI when exact-alarm permission is missing.
+            if (isCapacitor) {
+                const nativeScheduled = await scheduleNativeTimer(tmEndTime);
+                if (!nativeScheduled) {
+                    // Permission missing -- keep timer stopped, restore tmRemaining, show warning
+                    showTimerStatusMessage(true);
+                    if (isFreshStart) {
+                        tmRemaining = 0;
+                    }
+                    return;
+                }
+                showTimerStatusMessage(false);
+            }
+
+            // Commit UI to running state only after native scheduling succeeds.
+            if (isFreshStart) {
                 tmInputContainer.classList.add('hidden');
                 tmDisplay.classList.remove('hidden');
                 tmCancelBtn.disabled = false;
             }
-            tmEndTime = Date.now() + tmRemaining;
+
             tmRunning = true;
             tmInterval = setInterval(updateTMDisplay, 50); // fast update for smooth display
             setButtonIcon(tmStartPauseBtn, 'pause');
-            scheduleNativeTimer(tmEndTime);
+            if (!isCapacitor) {
+                scheduleNativeTimer(tmEndTime); // fire-and-forget for PWA, no native reliability
+            }
             saveTimerState();
         }
         lucide.createIcons();
@@ -1907,14 +1942,36 @@ document.addEventListener('DOMContentLoaded', () => {
         localStorage.removeItem('tmEndTime');
         localStorage.removeItem('tmDuration');
         resetTimerUI();
+        showTimerStatusMessage(false);
     });
 
-    function restoreTimerState() {
+    function showTimerStatusMessage(show) {
+        const el = document.getElementById('timer-status-message');
+        if (el) {
+            el.style.display = show ? 'flex' : 'none';
+        }
+    }
+
+    async function restoreTimerState() {
         const savedEndTime = localStorage.getItem('tmEndTime');
         if (savedEndTime) {
             const endTime = parseInt(savedEndTime, 10);
             const remaining = endTime - Date.now();
             if (remaining > 0) {
+                // On Capacitor, try to reschedule the native timer first.
+                // If rescheduling fails (permission missing), clear saved state
+                // and reset to avoid a phantom running timer that won't fire.
+                if (isCapacitor) {
+                    const nativeScheduled = await scheduleNativeTimer(endTime);
+                    if (!nativeScheduled) {
+                        localStorage.removeItem('tmEndTime');
+                        localStorage.removeItem('tmDuration');
+                        showTimerStatusMessage(true);
+                        return;
+                    }
+                    showTimerStatusMessage(false);
+                }
+
                 tmRunning = true;
                 tmEndTime = endTime;
                 tmRemaining = remaining;
@@ -1925,7 +1982,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 tmInterval = setInterval(updateTMDisplay, 50);
                 setButtonIcon(tmStartPauseBtn, 'pause');
                 lucide.createIcons();
-                scheduleNativeTimer(tmEndTime);
             } else {
                 localStorage.removeItem('tmEndTime');
                 localStorage.removeItem('tmDuration');
@@ -2116,8 +2172,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // Modify scheduleNativeTimer to log native status after scheduling
     const _origScheduleNativeTimer = scheduleNativeTimer;
     scheduleNativeTimer = async function(endTimeMs) {
-        await _origScheduleNativeTimer(endTimeMs);
-        await logNativeAlarmAfterSchedule('schedule timer');
+        const result = await _origScheduleNativeTimer(endTimeMs);
+        if (result) {
+            await logNativeAlarmAfterSchedule('schedule timer');
+        }
+        return result;
     };
 
     // --- Reliability Modal Event Listeners ---
@@ -2229,11 +2288,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
             await CustomAlarm.schedule({
                 id: testAlarmId,
-                time: testTime,
+                triggerAtMs: testTime,
+                time: '00:00',
                 label: 'Test Alarm (2 min)',
                 active: true,
                 days: [0, 1, 2, 3, 4, 5, 6],
-                sound: 'classic'
+                sound: 'classic',
+                type: 'test'
             });
 
             testAlarmScheduled = true;
@@ -2291,7 +2352,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 2000);
     });
     renderWorldClocks();
-    restoreTimerState();
+    restoreTimerState().catch(console.error);
     setInterval(updateClocks, 1000);
     
     // Periodic reliability check (every 30 seconds)

@@ -84,10 +84,12 @@ public class CustomAlarmPlugin extends Plugin {
     @PluginMethod
     public void schedule(PluginCall call) {
         Integer id = call.getInt("id");
-        Long time = call.getLong("time");
+        Long triggerAtMs = call.getLong("triggerAtMs");
+        String time = call.getString("time", "00:00");
+        String type = call.getString("type", "alarm");
 
-        if (id == null || time == null) {
-            call.reject("Must provide an id and a time");
+        if (id == null || triggerAtMs == null) {
+            call.reject("Must provide an id and a triggerAtMs");
             return;
         }
 
@@ -107,19 +109,45 @@ public class CustomAlarmPlugin extends Plugin {
             days = new int[]{0, 1, 2, 3, 4, 5, 6};
         }
 
-        // Persist full alarm data natively
-        AlarmData alarmData = new AlarmData(id, call.getString("time", "00:00"), label,
-                active, days, sound, time);
-        AlarmData.save(context, alarmData);
-
-        if (!AlarmScheduler.canScheduleExactAlarms(context)) {
-            // Permission missing — save as pending; the schedule will be
-            // processed once the user grants permission (see MainActivity.onResume).
-            call.resolve();
+        // Reject one-shot schedules (timer/test) with stale trigger times.
+        if (!"alarm".equals(type) && triggerAtMs <= System.currentTimeMillis()) {
+            android.util.Log.w("CustomAlarmPlugin", "schedule: rejecting stale " + type
+                    + " " + id + " with triggerAtMs " + triggerAtMs);
+            call.reject(type + " trigger time must be in the future");
             return;
         }
 
-        AlarmScheduler.scheduleAlarm(context, id, time);
+        // Only persist repeating alarm data for type "alarm".
+        // Timers and test alarms are one-shot and should not be restored on reboot
+        // as repeating alarms with corrupted time data.
+        if ("alarm".equals(type)) {
+            AlarmData alarmData = new AlarmData(id, time, label, active, days, sound, triggerAtMs);
+            AlarmData.save(context, alarmData);
+        }
+
+        boolean hasExactAlarmPermission = AlarmScheduler.canScheduleExactAlarms(context);
+
+        if (!hasExactAlarmPermission) {
+            if ("alarm".equals(type)) {
+                // Repeating alarm: persist as pending; it will be scheduled
+                // once the user grants permission (see MainActivity.onResume).
+                android.util.Log.i("CustomAlarmPlugin", "schedule: exact alarm permission missing for alarm "
+                        + id + " -- persisted as pending");
+                call.resolve();
+            } else {
+                // One-shot (timer / test): reject immediately -- there's no
+                // point persisting a one-shot alarm because the trigger time
+                // will be stale by the time permission is granted.
+                android.util.Log.w("CustomAlarmPlugin", "schedule: exact alarm permission missing for "
+                        + type + " " + id + " -- rejecting");
+                call.reject("Exact alarm permission required for " + type + " schedule");
+            }
+            return;
+        }
+
+        android.util.Log.d("CustomAlarmPlugin", "schedule: " + type + " " + id
+                + " triggerAtMs=" + triggerAtMs + " time=" + time);
+        AlarmScheduler.scheduleAlarm(context, id, triggerAtMs);
         call.resolve();
     }
 

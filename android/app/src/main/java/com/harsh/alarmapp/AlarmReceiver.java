@@ -24,7 +24,7 @@ public class AlarmReceiver extends BroadcastReceiver {
         String action = intent.getAction();
         if (action == null) return;
 
-        // ── Stop alarm ─────────────────────────────────────────────
+        // -- Stop alarm ----------------------------------------
         if (ACTION_STOP_ALARM.equals(action)) {
             Intent stopService = new Intent(context, AlarmService.class);
             context.stopService(stopService);
@@ -33,22 +33,20 @@ public class AlarmReceiver extends BroadcastReceiver {
             return;
         }
 
-        // ── Exact-alarm permission changed (user toggled in Settings) ──
-        // Do NOT treat this as an alarm trigger — just reschedule any
+        // -- Exact-alarm permission changed (user toggled in Settings) --
+        // Do NOT treat this as an alarm trigger -- just reschedule any
         // pending alarms that were deferred for lack of permission.
         if (ACTION_PERMISSION_CHANGED.equals(action)) {
             if (AlarmScheduler.canScheduleExactAlarms(context)) {
-                java.util.List<AlarmData> allAlarms = AlarmData.loadAll(context);
-                for (AlarmData alarm : allAlarms) {
-                    if (alarm.active && alarm.nextTriggerMs > System.currentTimeMillis()) {
-                        AlarmScheduler.scheduleAlarm(context, alarm.id, alarm.nextTriggerMs);
-                    }
-                }
+                android.util.Log.i("AlarmReceiver", "Permission changed -- rescheduling active repeating alarms");
+                AlarmScheduler.rescheduleActiveRepeatingAlarms(context);
+            } else {
+                android.util.Log.w("AlarmReceiver", "Permission changed broadcast received but permission is still denied");
             }
             return;
         }
 
-        // ── Validate that this is a real alarm trigger ─────────────
+        // -- Validate that this is a real alarm trigger ---------
         // Only ALARM_TRIGGER_* intents from AlarmScheduler with a valid
         // alarmId should proceed to acquire resources and start the service.
         if (!action.startsWith("ALARM_TRIGGER_")) {
@@ -61,7 +59,7 @@ public class AlarmReceiver extends BroadcastReceiver {
             return;
         }
 
-        // ── Acquire wake lock ──────────────────────────────────────
+        // -- Acquire wake lock -----------------------------------
         PowerManager pm = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
         PowerManager.WakeLock wakeLock = null;
         if (pm != null) {
@@ -69,15 +67,15 @@ public class AlarmReceiver extends BroadcastReceiver {
             wakeLock.acquire(30_000L);
         }
 
-        // ── Schedule next occurrence for repeating alarms ───────────
+        // -- Schedule next occurrence for repeating alarms --------
         // Do this BEFORE starting the service so it's scheduled even
         // if the foreground service has issues on some OEMs.
         AlarmData.rescheduleNext(context, alarmId);
 
-        // ── Heads-up notification ────────────────────────────────────
+        // -- Heads-up notification ---------------------------------
         postHeadsUpNotification(context, alarmId);
 
-        // ── Start foreground service ─────────────────────────────────
+        // -- Start foreground service ------------------------------
         Intent serviceIntent = new Intent(context, AlarmService.class);
         serviceIntent.putExtra("alarmId", alarmId);
         try {

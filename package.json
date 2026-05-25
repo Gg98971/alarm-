@@ -5,7 +5,7 @@
   "main": "app.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "mkdir -p www 2>/dev/null || true && cp index.html www/ && cp index.css www/ && cp app.js www/ && cp manifest.json www/ && cp service-worker.js www/",
+    "build": "node build.js",
     "sync": "cap sync android"
   },
   "repository": {

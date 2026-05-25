@@ -120,9 +120,32 @@ public final class AlarmData {
         if (!alarm.active || alarm.days == null || alarm.days.length == 0) {
             return Long.MAX_VALUE;
         }
+
+        // Validate time format -- reject invalid times instead of silently
+        // parsing garbage (e.g. a timestamp string stored in the time field).
+        if (alarm.time == null || !alarm.time.matches("\\d{2}:\\d{2}")) {
+            android.util.Log.w("AlarmData", "computeNextTriggerMs: invalid time format for alarm "
+                    + alarm.id + ": \"" + alarm.time + "\"");
+            return Long.MAX_VALUE;
+        }
+
         String[] parts = alarm.time.split(":");
-        int hour = Integer.parseInt(parts[0]);
-        int minute = Integer.parseInt(parts[1]);
+        int hour;
+        int minute;
+        try {
+            hour = Integer.parseInt(parts[0]);
+            minute = Integer.parseInt(parts[1]);
+        } catch (NumberFormatException e) {
+            android.util.Log.w("AlarmData", "computeNextTriggerMs: non-numeric time for alarm "
+                    + alarm.id + ": \"" + alarm.time + "\"");
+            return Long.MAX_VALUE;
+        }
+
+        if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+            android.util.Log.w("AlarmData", "computeNextTriggerMs: out-of-range time for alarm "
+                    + alarm.id + ": hour=" + hour + " minute=" + minute);
+            return Long.MAX_VALUE;
+        }
 
         Calendar now = Calendar.getInstance();
         Calendar target = Calendar.getInstance();

@@ -1460,6 +1460,25 @@ input:checked + .slider:before {
     }
 }
 
+.timer-status-message {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    background: rgba(255, 200, 50, 0.1);
+    border: 1px solid rgba(255, 200, 50, 0.3);
+    border-radius: 10px;
+    font-size: 0.85rem;
+    color: #ffc832;
+    width: 100%;
+}
+
+.timer-status-message i {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+}
+
 .timer-select label {
     position: absolute;
     right: 12px;

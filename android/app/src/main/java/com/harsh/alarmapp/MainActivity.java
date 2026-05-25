@@ -67,17 +67,16 @@ public class MainActivity extends BridgeActivity {
 
     /**
      * Process any alarms that were deferred because exact-alarm permission
-     * was missing at schedule time.
+     * was missing at schedule time.  Delegates to the shared recalculation
+     * helper so that every deferred alarm gets a fresh next-trigger-time
+     * computed from its day-of-week schedule rather than using a possibly
+     * stale nextTriggerMs.
      */
     private void processPendingSchedules() {
         if (!AlarmScheduler.canScheduleExactAlarms(this)) return;
 
-        List<AlarmData> allAlarms = AlarmData.loadAll(this);
-        for (AlarmData alarm : allAlarms) {
-            if (alarm.active && alarm.nextTriggerMs > System.currentTimeMillis()) {
-                AlarmScheduler.scheduleAlarm(this, alarm.id, alarm.nextTriggerMs);
-            }
-        }
+        android.util.Log.i("MainActivity", "processPendingSchedules: delegating to rescheduleActiveRepeatingAlarms");
+        AlarmScheduler.rescheduleActiveRepeatingAlarms(this);
     }
 }
 
