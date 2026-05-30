@@ -41,10 +41,12 @@ public class AlarmService extends Service {
     public void onCreate() {
         super.onCreate();
         acquireWakeLock();
+        AlarmReceiver.releaseStaticWakeLock();
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
+        AlarmReceiver.releaseStaticWakeLock();
         if (intent != null) {
             activeAlarmId = intent.getIntExtra("alarmId", activeAlarmId);
         }

@@ -18,6 +18,30 @@ public class AlarmReceiver extends BroadcastReceiver {
     private static final String ACTION_PERMISSION_CHANGED =
             "android.intent.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED";
 
+    private static PowerManager.WakeLock sStaticWakeLock;
+
+    public static synchronized void acquireStaticWakeLock(Context context) {
+        if (sStaticWakeLock == null) {
+            PowerManager pm = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
+            if (pm != null) {
+                sStaticWakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "AlarmApp:StaticReceiverWakelock");
+                sStaticWakeLock.setReferenceCounted(false);
+            }
+        }
+        if (sStaticWakeLock != null) {
+            sStaticWakeLock.acquire(60_000L);
+        }
+    }
+
+    public static synchronized void releaseStaticWakeLock() {
+        if (sStaticWakeLock != null && sStaticWakeLock.isHeld()) {
+            try {
+                sStaticWakeLock.release();
+            } catch (Exception ignored) { }
+            sStaticWakeLock = null;
+        }
+    }
+
     @Override
     public void onReceive(Context context, Intent intent) {
         if (intent == null) return;
@@ -60,12 +84,7 @@ public class AlarmReceiver extends BroadcastReceiver {
         }
 
         // -- Acquire wake lock -----------------------------------
-        PowerManager pm = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
-        PowerManager.WakeLock wakeLock = null;
-        if (pm != null) {
-            wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "AlarmApp:AlarmReceiverWakelock");
-            wakeLock.acquire(30_000L);
-        }
+        acquireStaticWakeLock(context);
 
         // -- Schedule next occurrence for repeating alarms --------
         // Do this BEFORE starting the service so it's scheduled even
@@ -84,10 +103,9 @@ public class AlarmReceiver extends BroadcastReceiver {
             } else {
                 context.startService(serviceIntent);
             }
-        } catch (Exception e) { e.printStackTrace(); }
-
-        if (wakeLock != null && wakeLock.isHeld()) {
-            try { wakeLock.release(); } catch (Exception ignored) { }
+        } catch (Exception e) {
+            e.printStackTrace();
+            releaseStaticWakeLock();
         }
     }
 
