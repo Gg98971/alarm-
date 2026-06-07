@@ -18,10 +18,16 @@ public class BootReceiver extends BroadcastReceiver {
         if (intent == null) return;
 
         String action = intent.getAction();
+        android.util.Log.i("BootReceiver", "onReceive: action=" + action);
 
-        if (Intent.ACTION_BOOT_COMPLETED.equals(action)) {
-            // Re-register all persisted alarms.
-            AlarmScheduler.rescheduleAllOnBoot(context);
+        if (Intent.ACTION_BOOT_COMPLETED.equals(action) ||
+            Intent.ACTION_MY_PACKAGE_REPLACED.equals(action) ||
+            Intent.ACTION_TIME_CHANGED.equals(action) ||
+            "android.intent.action.TIME_SET".equals(action) ||
+            Intent.ACTION_TIMEZONE_CHANGED.equals(action)) {
+            
+            // Re-register/re-calculate all persisted alarms.
+            AlarmScheduler.rescheduleActiveRepeatingAlarms(context);
         }
     }
 }
